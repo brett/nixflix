@@ -3,7 +3,7 @@
   lib,
 }:
 let
-  nixflixModule = import ../../modules;
+  nixflixModule = import ../../modules { microvm = null; };
 
   baseNixOS = _: {
     options = {

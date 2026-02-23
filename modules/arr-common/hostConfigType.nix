@@ -11,6 +11,18 @@ types.submodule {
       description = "Address to bind to";
     };
 
+    apiHost = mkOption {
+      type = types.str;
+      default = "127.0.0.1";
+      description = ''
+        Host to use when polling the API for readiness checks.
+        Defaults to 127.0.0.1 for host-side services.
+        In microVM guests, set this to the VM's own static IP so the
+        wait-for-api script can reach the service (Kestrel with bindAddress=*
+        does not always serve on the loopback interface inside a VM).
+      '';
+    };
+
     port = mkOption {
       type = types.port;
       description = "Port the service listens on";

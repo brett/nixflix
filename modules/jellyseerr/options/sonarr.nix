@@ -143,6 +143,12 @@ let
   defaultInstances =
     (optionalAttrs (config.nixflix.sonarr.enable or false) {
       Sonarr = {
+        # Use microVM IP if sonarr is running in microVM, otherwise localhost
+        hostname =
+          if (config.nixflix.microvm.enable or false) && (config.nixflix.sonarr.microvm.enable or false) then
+            config.nixflix.sonarr.microvm.address
+          else
+            "127.0.0.1";
         port = config.nixflix.sonarr.config.hostConfig.port or 8989;
         inherit (config.nixflix.sonarr.config) apiKey;
         baseUrl = config.nixflix.sonarr.config.hostConfig.urlBase;
@@ -162,6 +168,14 @@ let
     })
     // (optionalAttrs (config.nixflix.sonarr-anime.enable or false) {
       "Sonarr Anime" = {
+        # Use microVM IP if sonarr-anime is running in microVM, otherwise localhost
+        hostname =
+          if
+            (config.nixflix.microvm.enable or false) && (config.nixflix.sonarr-anime.microvm.enable or false)
+          then
+            config.nixflix.sonarr-anime.microvm.address
+          else
+            "127.0.0.1";
         port = config.nixflix.sonarr-anime.config.hostConfig.port or 8990;
         inherit (config.nixflix.sonarr-anime.config) apiKey;
         baseUrl = config.nixflix.sonarr-anime.config.hostConfig.urlBase;

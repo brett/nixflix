@@ -1,8 +1,10 @@
 {
   lib,
   nixosModules,
+  microvm,
   pkgs ? import <nixpkgs> { inherit system; },
   system ? builtins.currentSystem,
+  hypervisor ? "cloud-hypervisor",
 }:
 let
   testFiles = builtins.filter (name: name != "default.nix" && pkgs.lib.hasSuffix ".nix" name) (
@@ -14,7 +16,15 @@ let
   importTest =
     file:
     let
-      test = import (./. + "/${file}") { inherit system pkgs nixosModules; };
+      fn = import (./. + "/${file}");
+      acceptedArgs = builtins.functionArgs fn;
+      args = {
+        inherit system pkgs nixosModules;
+      }
+      // lib.optionalAttrs (acceptedArgs ? microvm) { inherit microvm; }
+      // lib.optionalAttrs (acceptedArgs ? lib) { inherit lib; }
+      // lib.optionalAttrs (acceptedArgs ? hypervisor) { inherit hypervisor; };
+      test = fn args;
       fileContents = builtins.readFile (./. + "/${file}");
     in
     test

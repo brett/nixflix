@@ -110,8 +110,10 @@ nav:
   - Home: index.md
   - Getting Started:
       - getting-started/index.md
+      - MicroVM Isolation: getting-started/microvm.md
   - Examples:
       - Basic Setup: examples/basic-setup.md
+      - MicroVM Setup: examples/microvm-setup.md
 # REFERENCE_NAV_PLACEHOLDER
 extra:
   social:

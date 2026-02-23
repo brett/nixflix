@@ -26,6 +26,20 @@ VM tests spin up actual NixOS virtual machines and test the full service stack, 
 - Configuration service execution
 - Multi-service integration
 
+#### MicroVM Tests
+
+MicroVM tests verify the optional microVM isolation feature that runs each service in its own lightweight virtual machine using `microvm.nix`. These tests include:
+
+- `microvm-basic.nix` - Single service (Sonarr) in microVM
+- `microvm-networking.nix` - Network connectivity between host and microVM
+- `microvm-storage.nix` - virtiofs mounts and hardlink functionality
+- `microvm-full-stack.nix` - Complete stack with multiple microVMs
+- `microvm-nginx.nix` - nginx reverse proxy routing to microVM services
+- `microvm-jellyfin-jellyseerr.nix` - Jellyfin and Jellyseerr in microVMs
+- `microvm-minimal.nix` - Minimal bridge networking test (standalone, no nixflix modules)
+
+All microVM tests default to the QEMU hypervisor. See [Running MicroVM Tests with a Different Hypervisor](#running-microvm-tests-with-a-different-hypervisor) for how to select cloud-hypervisor at test-run time.
+
 ### 2. Unit Tests (Configuration Tests)
 
 Unit tests verify that NixOS module options generate correct systemd service definitions without actually running the services. They validate:
@@ -64,6 +78,27 @@ It should be noted that running tests that require internet access is a big no-n
 because the test is no longer deterministic. It is basically the same as `nix build . --impure`.
 So, you should only use this when absolutely necessary. As soon as you add the internet
 as a dependency, you instantly make your tests more error prone and brittle.
+
+### Running MicroVM Tests with a Different Hypervisor
+
+By default, all microVM tests use QEMU. To run them with `cloud-hypervisor` instead, use the `lib.microvmTests` flake output, which accepts a `hypervisor` argument at evaluation time:
+
+```bash
+# Run a single microvm test with cloud-hypervisor
+nix build --impure --expr \
+  '((builtins.getFlake "path:.").lib.microvmTests { hypervisor = "cloud-hypervisor"; }).microvm-basic'
+
+# Run the full-stack test with cloud-hypervisor
+nix build --impure --expr \
+  '((builtins.getFlake "path:.").lib.microvmTests { hypervisor = "cloud-hypervisor"; }).microvm-full-stack'
+```
+
+`lib.microvmTests` accepts:
+
+- `hypervisor` — `"cloud-hypervisor"` (default) or `"qemu"`
+- `system` — defaults to `"x86_64-linux"`
+
+The standard `nix build .#checks.x86_64-linux.microvm-*` commands always use QEMU and remain unchanged.
 
 ### Run Tests Locally with Interactive VM
 
@@ -188,7 +223,39 @@ Unit tests will show Nix evaluation errors. Check:
 - Missing or incorrect options
 - Type mismatches in configuration
 
+## Current Test Status (2026-02-17)
+
+All 28 checks pass.
+
+**MicroVM tests (7/7):**
+
+- ✅ microvm-basic
+- ✅ microvm-networking
+- ✅ microvm-storage
+- ✅ microvm-full-stack
+- ✅ microvm-nginx
+- ✅ microvm-jellyfin-jellyseerr
+- ✅ microvm-minimal
+
+**Non-microVM VM tests (19/19):**
+
+- ✅ sonarr-basic, radarr-basic, lidarr-basic, prowlarr-basic, sonarr-anime-basic
+- ✅ jellyfin-basic, jellyfin-integration
+- ✅ jellyseerr-basic
+- ✅ sabnzbd-basic
+- ✅ recyclarr-basic
+- ✅ postgresql-integration
+- ✅ mullvad-integration
+- ✅ nginx-integration
+- ✅ full-stack
+
+**Other checks (2/2):**
+
+- ✅ formatting
+- ✅ docs-build
+
 ## Resources
 
 - [NixOS VM Tests Documentation](https://nixos.org/manual/nixos/stable/#sec-nixos-tests)
 - [Testing NixOS Modules](https://nix.dev/tutorials/nixos/integration-testing-using-virtual-machines)
+- [microvm.nix Documentation](https://microvm-nix.github.io/microvm.nix/)

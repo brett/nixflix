@@ -13,11 +13,13 @@ pkgs.testers.runNixOSTest {
 
       virtualisation = {
         diskSize = 3 * 1024;
+        memorySize = 2047;
         cores = 4;
       };
 
       nixflix = {
         enable = true;
+        postgres.enable = true;
 
         recyclarr.enable = false;
 
@@ -96,6 +98,10 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     start_all()
+    # Wait for PostgreSQL
+    machine.wait_for_unit("postgresql.service", timeout=120)
+    machine.wait_for_unit("postgresql-ready.target", timeout=180)
+
 
     port = 5055
     machine.wait_for_unit("jellyfin.service", timeout=300)

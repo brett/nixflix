@@ -1,4 +1,7 @@
 {
+  microvm ? null,
+}:
+{
   config,
   lib,
   pkgs,
@@ -25,10 +28,21 @@ in
     ./sonarr.nix
     ./torrentClients
     ./usenetClients
-  ];
+  ]
+  ++ optional (microvm != null) (import ./microvm { inherit microvm; });
 
   options.nixflix = {
     enable = mkEnableOption "Nixflix";
+
+    isGuest = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Whether this NixOS configuration is for a microVM guest, not the host.
+        When true, config/management services (e.g. prowlarr-config) are suppressed
+        because they run on the host and connect to the VM via the bridge network.
+      '';
+    };
 
     serviceDependencies = mkOption {
       type = types.listOf types.str;

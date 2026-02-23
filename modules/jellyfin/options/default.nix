@@ -107,5 +107,37 @@ in
         '';
       };
     };
+
+    microvm = {
+      enable = mkOption {
+        type = types.bool;
+        default = config.nixflix.microvm.enable or false;
+        description = ''
+          Run Jellyfin in an isolated microVM.
+          Inherits from nixflix.microvm.enable but can be overridden per-service.
+        '';
+      };
+
+      address = mkOption {
+        type = types.str;
+        default = config.nixflix.microvm.addresses.jellyfin or "127.0.0.1";
+        description = ''
+          IP address for the Jellyfin microVM.
+          Automatically assigned from nixflix.microvm.addresses.
+        '';
+      };
+
+      vcpus = mkOption {
+        type = types.int;
+        default = config.nixflix.microvm.defaults.vcpus or 2;
+        description = "Number of vCPUs for the Jellyfin microVM";
+      };
+
+      memoryMB = mkOption {
+        type = types.int;
+        default = config.nixflix.microvm.defaults.memoryMB or 1024;
+        description = "Memory in MB for the Jellyfin microVM";
+      };
+    };
   };
 }

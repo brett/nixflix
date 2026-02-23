@@ -113,16 +113,16 @@ pkgsUnfree.testers.runNixOSTest {
     assert "testapikey123456789abcdef" not in template_content, "Template should not contain actual secrets"
 
     # Verify the config file exists and has correct permissions
-    machine.succeed("test -f /var/lib/sabnzbd/sabnzbd.ini")
-    machine.succeed("stat -c '%U:%G' /var/lib/sabnzbd/sabnzbd.ini | grep -q 'sabnzbd:media'")
-    machine.succeed("stat -c '%a' /var/lib/sabnzbd/sabnzbd.ini | grep -q '600'")
+    machine.succeed("test -f /data/.state/sabnzbd/sabnzbd.ini")
+    machine.succeed("stat -c '%U:%G' /data/.state/sabnzbd/sabnzbd.ini | grep -q 'sabnzbd:media'")
+    machine.succeed("stat -c '%a' /data/.state/sabnzbd/sabnzbd.ini | grep -q '600'")
 
     # Check the journal output from the sabnzbd service
     sabnzbd_journal = machine.succeed("journalctl -u sabnzbd.service -n 50 --no-pager")
     print(f"SABnzbd service journal:\n{sabnzbd_journal}")
 
     # Verify the merged config file has actual secret values
-    config_content = machine.succeed("cat /var/lib/sabnzbd/sabnzbd.ini")
+    config_content = machine.succeed("cat /data/.state/sabnzbd/sabnzbd.ini")
     print(f"Config content:\n{config_content}")
 
     # Check that secrets were merged correctly

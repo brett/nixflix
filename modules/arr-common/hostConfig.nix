@@ -49,14 +49,14 @@ in
       script = ''
         set -eu
 
-        BASE_URL="http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
+        BASE_URL="http://${serviceConfig.hostConfig.apiHost}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
 
         # Get current host configuration
         echo "Fetching current host configuration..."
         HOST_CONFIG=$(${
           mkSecureCurl serviceConfig.apiKey {
             url = "$BASE_URL/config/host";
-            extraArgs = "-f";
+            extraArgs = "-f --max-time 30";
           }
         } 2>/dev/null)
 
@@ -67,6 +67,7 @@ in
 
         # Extract the ID from the host config (needed for PUT request)
         CONFIG_ID=$(echo "$HOST_CONFIG" | ${pkgs.jq}/bin/jq -r '.id')
+        echo "Config ID: $CONFIG_ID"
 
         # Build the complete configuration JSON
         echo "Building configuration..."
@@ -133,7 +134,7 @@ in
 
         # Update host configuration
         echo "Updating ${capitalizedName} configuration via API..."
-        ${
+        PUT_RESPONSE=$(${
           mkSecureCurl serviceConfig.apiKey {
             url = "$BASE_URL/config/host/$CONFIG_ID";
             method = "PUT";
@@ -141,16 +142,29 @@ in
               "Content-Type" = "application/json";
             };
             data = "$NEW_CONFIG";
-            extraArgs = "-f";
+            extraArgs = "--max-time 60 -w '\\n%{http_code}'";
           }
-        } > /dev/null
+        } 2>&1 || true)
+        PUT_HTTP_CODE=$(echo "$PUT_RESPONSE" | tail -1)
+        echo "PUT HTTP status: $PUT_HTTP_CODE"
+        if [[ ! "$PUT_HTTP_CODE" =~ ^2 ]]; then
+          echo "PUT response body: $(echo "$PUT_RESPONSE" | head -c 2000)"
+          echo "Failed to update ${capitalizedName} configuration (HTTP $PUT_HTTP_CODE)" >&2
+          exit 1
+        fi
 
         echo "Configuration updated successfully"
 
-        # Restart the service to pick up the new configuration
-        echo "Restarting ${serviceName} service..."
-        systemctl restart ${serviceName}.service
-        echo "${capitalizedName} service restarted"
+        # Restart the service to pick up the new configuration.
+        # In microVM mode the service runs inside the VM (not locally), so we
+        # skip the restart and let the running instance keep the API-applied config.
+        echo "Restarting ${serviceName} service (if managed locally)..."
+        if systemctl cat ${serviceName}.service > /dev/null 2>&1; then
+          systemctl restart ${serviceName}.service
+          echo "${capitalizedName} service restarted"
+        else
+          echo "Note: ${serviceName}.service not found locally (running in microVM), skipping restart"
+        fi
       '';
     };
 }

@@ -8,7 +8,14 @@ with lib;
   options.nixflix.jellyseerr.jellyfin = {
     hostname = mkOption {
       type = types.str;
-      default = "127.0.0.1";
+      # Use microVM IP if jellyfin is running in microVM, otherwise localhost
+      default =
+        if
+          (config.nixflix.microvm.enable or false) && (config.nixflix.jellyfin.microvm.enable or false)
+        then
+          config.nixflix.jellyfin.microvm.address
+        else
+          "127.0.0.1";
       description = "Jellyfin server hostname";
     };
 

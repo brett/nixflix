@@ -21,6 +21,7 @@ pkgsUnfree.testers.runNixOSTest {
 
       nixflix = {
         enable = true;
+        postgres.enable = true;
 
         radarr = {
           enable = true;
@@ -93,6 +94,10 @@ pkgsUnfree.testers.runNixOSTest {
 
   testScript = ''
     start_all()
+    # Wait for PostgreSQL
+    machine.wait_for_unit("postgresql.service", timeout=120)
+    machine.wait_for_unit("postgresql-ready.target", timeout=180)
+
 
     # Wait for services to start (longer timeout for initial DB migrations)
     machine.wait_for_unit("radarr.service", timeout=180)

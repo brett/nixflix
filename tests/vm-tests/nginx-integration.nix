@@ -25,6 +25,7 @@ pkgsUnfree.testers.runNixOSTest {
 
       nixflix = {
         enable = true;
+        postgres.enable = true;
 
         nginx = {
           enable = true;
@@ -141,6 +142,10 @@ pkgsUnfree.testers.runNixOSTest {
 
   testScript = ''
     start_all()
+
+    # Wait for PostgreSQL
+    machine.wait_for_unit("postgresql.service", timeout=120)
+    machine.wait_for_unit("postgresql-ready.target", timeout=180)
 
     # Wait for nginx
     machine.wait_for_unit("nginx.service", timeout=60)

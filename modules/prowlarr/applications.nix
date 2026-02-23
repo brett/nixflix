@@ -7,6 +7,7 @@ with lib;
 let
   secrets = import ../../lib/secrets { inherit lib; };
   mkSecureCurl = import ../../lib/mk-secure-curl.nix { inherit lib pkgs; };
+  mkWaitForApiScript = import ../arr-common/mkWaitForApiScript.nix { inherit lib pkgs; };
 in
 {
   type = mkOption {
@@ -70,12 +71,13 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
+      ExecStartPre = mkWaitForApiScript "prowlarr" serviceConfig;
     };
 
     script = ''
       set -eu
 
-      BASE_URL="http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
+      BASE_URL="http://${serviceConfig.hostConfig.apiHost}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
 
       # Fetch all application schemas
       echo "Fetching application schemas..."

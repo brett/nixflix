@@ -10,11 +10,11 @@ let
   cfg = config.nixflix.usenetClients.sabnzbd;
 in
 {
-  config = mkIf (config.nixflix.enable && cfg.enable && cfg.settings.categories != [ ]) {
+  config = mkIf (config.nixflix.enable && cfg.enable && cfg.settings.categories != [ ] && !(config.nixflix.isGuest or false)) {
     systemd.services.sabnzbd-categories = {
       description = "Configure SABnzbd categories";
-      after = [ "sabnzbd.service" ];
-      requires = [ "sabnzbd.service" ];
+      after = [ (if cfg.microvm.enable then "microvm@sabnzbd.service" else "sabnzbd.service") ];
+      requires = [ (if cfg.microvm.enable then "microvm@sabnzbd.service" else "sabnzbd.service") ];
       wantedBy = [ "multi-user.target" ];
 
       path = with pkgs; [
@@ -31,7 +31,7 @@ in
       script = ''
         set -euo pipefail
 
-        BASE_URL="http://${cfg.settings.misc.host}:${toString cfg.settings.misc.port}${cfg.settings.misc.url_base}"
+        BASE_URL="http://${if cfg.microvm.enable then cfg.microvm.address else cfg.settings.misc.host}:${toString cfg.settings.misc.port}${cfg.settings.misc.url_base}"
 
         # Function to make API calls
         api_call() {

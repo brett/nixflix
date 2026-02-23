@@ -106,6 +106,12 @@ let
 
   defaultInstance = optionalAttrs (config.nixflix.radarr.enable or false) {
     Radarr = {
+      # Use microVM IP if radarr is running in microVM, otherwise localhost
+      hostname =
+        if (config.nixflix.microvm.enable or false) && (config.nixflix.radarr.microvm.enable or false) then
+          config.nixflix.radarr.microvm.address
+        else
+          "127.0.0.1";
       port = config.nixflix.radarr.config.hostConfig.port or 7878;
       inherit (config.nixflix.radarr.config) apiKey;
       baseUrl = config.nixflix.radarr.config.hostConfig.urlBase;

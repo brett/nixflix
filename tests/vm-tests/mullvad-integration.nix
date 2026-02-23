@@ -15,6 +15,7 @@ pkgs.testers.runNixOSTest {
 
       nixflix = {
         enable = true;
+        postgres.enable = true;
         mullvad = {
           enable = true;
           accountNumber = "";
@@ -103,6 +104,10 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     start_all()
+
+    # Wait for PostgreSQL
+    machine.wait_for_unit("postgresql.service", timeout=120)
+    machine.wait_for_unit("postgresql-ready.target", timeout=180)
 
     # Wait for Mullvad daemon to start
     machine.wait_for_unit("mullvad-daemon.service", timeout=60)

@@ -11,6 +11,10 @@
       url = "github:ruslanlap/mkdocs-catppuccin";
       flake = false;
     };
+    microvm = {
+      url = "github:astro/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -43,8 +47,31 @@
         );
     in
     {
-      nixosModules.default = import ./modules;
-      nixosModules.nixflix = import ./modules;
+      nixosModules.default = import ./modules { inherit (inputs) microvm; };
+      nixosModules.nixflix = import ./modules { inherit (inputs) microvm; };
+
+      lib.microvmTests =
+        {
+          system ? "x86_64-linux",
+          hypervisor ? "cloud-hypervisor",
+        }:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
+            config.allowUnfreePredicate = _: true;
+          };
+        in
+        import ./tests/vm-tests {
+          inherit
+            system
+            pkgs
+            hypervisor
+            lib
+            ;
+          nixosModules = self.nixosModules.default;
+          inherit (inputs) microvm;
+        };
 
       packages = perSystem (
         {
@@ -91,6 +118,7 @@
           tests = import ./tests {
             inherit system pkgs lib;
             nixosModules = self.nixosModules.default;
+            inherit (inputs) microvm;
           };
         in
         {

@@ -25,6 +25,7 @@ pkgsUnfree.testers.runNixOSTest {
 
       nixflix = {
         enable = true;
+        postgres.enable = true;
 
         prowlarr = {
           enable = true;
@@ -135,6 +136,10 @@ pkgsUnfree.testers.runNixOSTest {
 
   testScript = ''
     start_all()
+
+    # Wait for PostgreSQL
+    machine.wait_for_unit("postgresql.service", timeout=120)
+    machine.wait_for_unit("postgresql-ready.target", timeout=180)
 
     # Verify tmpfile configuration
     machine.wait_for_unit("multi-user.target")

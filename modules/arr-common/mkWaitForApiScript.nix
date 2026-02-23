@@ -10,14 +10,18 @@ pkgs.writeShellScript "${serviceName}-wait-for-api" (
       lib.toUpper (builtins.substring 0 1 serviceName) + builtins.substring 1 (-1) serviceName;
   in
   ''
-    BASE_URL="http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
+    BASE_URL="http://${serviceConfig.hostConfig.apiHost}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
 
     echo "Waiting for ${capitalizedName} API to be available..."
     for i in {1..90}; do
       if ${
         mkSecureCurl serviceConfig.apiKey {
           url = "$BASE_URL/system/status";
-          extraArgs = "-f";
+          # --max-time 10: prevent curl from hanging indefinitely when the server
+          # has bound the TCP port but hasn't initialized its HTTP layer yet.
+          # Without this, curl waits forever on the first connection and the loop
+          # never advances (each iteration is blocked, not just sleeping 1s).
+          extraArgs = "-f --max-time 10";
         }
       } >/dev/null 2>&1; then
         echo "${capitalizedName} API is available"

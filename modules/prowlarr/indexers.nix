@@ -73,7 +73,7 @@ in
     script = ''
       set -eu
 
-      BASE_URL="http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
+      BASE_URL="http://${serviceConfig.hostConfig.apiHost}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
 
       # Fetch all indexer schemas
       echo "Fetching indexer schemas..."
