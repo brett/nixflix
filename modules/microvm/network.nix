@@ -39,50 +39,33 @@ in
       networkConfig.Bridge = cfg.network.bridge;
     };
 
-    # NAT configuration for internet access
-    # When Mullvad is enabled, this routes microVM traffic through the VPN
-    networking.nat = {
-      enable = true;
-      internalInterfaces = [ cfg.network.bridge ];
+    # NAT and forwarding for microVM internet access using nftables.
+    # Unconditional masquerade (no oifname filter) handles both the plain-internet
+    # path (default route) and the Mullvad VPN path (wg0-mullvad) transparently —
+    # the kernel picks the correct source address based on which interface is used.
+    # VPN bypass traffic is marked by vpn-routing.nix so Mullvad routes it outside
+    # the tunnel without any extra routing tables needed here.
+    networking.nftables = {
+      enable = mkDefault true;
+      tables.nixflix-microvm-nat = {
+        family = "ip";
+        content = ''
+          chain postrouting {
+            type nat hook postrouting priority srcnat; policy accept;
+            ip saddr ${cfg.network.subnet} masquerade
+          }
 
-      # Use the primary external interface
-      # If Mullvad is enabled, this will be the wg0-mullvad interface
-      # Otherwise, use the default gateway interface
-      externalInterface =
-        if nixflixCfg.mullvad.enable or false then
-          "wg0-mullvad"
-        else
-          # Try to detect the default route interface
-          # This is a fallback - users should configure this explicitly if needed
-          mkDefault "eth0";
+          chain forward {
+            type filter hook forward priority filter; policy accept;
+            iifname "${cfg.network.bridge}" accept
+            oifname "${cfg.network.bridge}" ct state established,related accept
+          }
+        '';
+      };
     };
 
-    # Firewall configuration
-    networking.firewall = {
-      # Trust the microVM bridge - allow all traffic between host and guests
-      trustedInterfaces = [ cfg.network.bridge ];
-
-      # Allow forwarding for NAT
-      extraCommands = ''
-        # Determine external interface
-        EXT_IF="${if nixflixCfg.mullvad.enable or false then "wg0-mullvad" else "eth0"}"
-
-        # Allow forwarding from bridge to external interface
-        iptables -A FORWARD -i ${cfg.network.bridge} -j ACCEPT
-        iptables -A FORWARD -o ${cfg.network.bridge} -m state --state RELATED,ESTABLISHED -j ACCEPT
-
-        # Add MASQUERADE rule for NAT (this is what was missing!)
-        iptables -t nat -A POSTROUTING -s ${cfg.network.subnet} -o $EXT_IF -j MASQUERADE
-      '';
-
-      extraStopCommands = ''
-        EXT_IF="${if nixflixCfg.mullvad.enable or false then "wg0-mullvad" else "eth0"}"
-
-        iptables -D FORWARD -i ${cfg.network.bridge} -j ACCEPT 2>/dev/null || true
-        iptables -D FORWARD -o ${cfg.network.bridge} -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
-        iptables -t nat -D POSTROUTING -s ${cfg.network.subnet} -o $EXT_IF -j MASQUERADE 2>/dev/null || true
-      '';
-    };
+    # Trust the microVM bridge so the host can reach guests
+    networking.firewall.trustedInterfaces = [ cfg.network.bridge ];
 
     # Enable IP forwarding (required for NAT)
     boot.kernel.sysctl = {

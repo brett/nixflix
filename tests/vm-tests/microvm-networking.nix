@@ -130,7 +130,7 @@ pkgsUnfree.testers.runNixOSTest {
     print("  ✓ IP forwarding enabled")
 
     # Verify NAT MASQUERADE is configured for microVM internet access
-    host.succeed("iptables -t nat -L POSTROUTING | grep MASQUERADE")
+    host.succeed("nft list table ip nixflix-microvm-nat | grep masquerade")
     print("  ✓ NAT MASQUERADE rule configured")
 
     print("\n=== Testing Static IP Assignments ===")
