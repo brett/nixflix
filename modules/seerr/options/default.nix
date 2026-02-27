@@ -22,6 +22,8 @@ in
     package = mkPackageOption pkgs "seerr" { };
 
     apiKey = secrets.mkSecretOption {
+      nullable = true;
+      default = null;
       description = "API key for Seerr.";
     };
 

@@ -29,5 +29,6 @@
     ../sonarr/microvm
     ../sonarr-anime/microvm
     ../usenetClients/sabnzbd/microvm
+    ../torrentClients/qbittorrent/microvm
   ];
 }

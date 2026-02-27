@@ -117,6 +117,12 @@ in
             default = "127.0.0.1";
             description = "Bind address for the WebUI";
           };
+
+          Preferences.WebUI.Username = mkOption {
+            type = types.str;
+            default = "admin";
+            description = "WebUI login username. Used by the microVM readiness check and download client integration.";
+          };
         };
       };
     };
@@ -129,6 +135,7 @@ in
       "subdomain"
       "downloadsDir"
       "categories"
+      "microvm"
     ];
 
     users = {

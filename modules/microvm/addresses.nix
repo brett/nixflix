@@ -32,6 +32,7 @@ in
     prowlarr = mkDefault (mkAddr 14);
     # Download clients
     sabnzbd = mkDefault (mkAddr 20);
+    qbittorrent = mkDefault (mkAddr 21);
     # Media
     jellyfin = mkDefault (mkAddr 30);
     jellyseerr = mkDefault (mkAddr 31);

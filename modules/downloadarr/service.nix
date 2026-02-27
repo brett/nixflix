@@ -62,6 +62,7 @@ let
         toUpper (builtins.substring 0 1 serviceName) + builtins.substring 1 (-1) serviceName;
 
       clients = map (transformClient serviceName) allClients;
+      serviceAddress = config.nixflix.globals.serviceAddresses.${serviceName} or "127.0.0.1";
     in
     {
       "${serviceName}-downloadclients" = {
@@ -89,14 +90,15 @@ let
         script = ''
           set -eu
 
-          BASE_URL="http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
+          BASE_URL="http://${serviceAddress}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
 
           # Fetch all download client schemas
+          # --retry: arr services may restart briefly after initial config; retry handles that window
           echo "Fetching download client schemas..."
           SCHEMAS=$(${
             mkSecureCurl serviceConfig.apiKey {
               url = "$BASE_URL/downloadclient/schema";
-              extraArgs = "-S";
+              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-max-time 120";
             }
           })
 
@@ -105,7 +107,7 @@ let
           DOWNLOAD_CLIENTS=$(${
             mkSecureCurl serviceConfig.apiKey {
               url = "$BASE_URL/downloadclient";
-              extraArgs = "-S";
+              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-max-time 120";
             }
           })
 
@@ -204,7 +206,9 @@ let
                         "Content-Type" = "application/json";
                       };
                       data = "$UPDATED_CLIENT";
-                      extraArgs = "-Sf";
+                      # --retry-connrefused: arr service may restart between GET and PUT
+                      # (config service inside VM); handles ECONNREFUSED on that window.
+                      extraArgs = "-Sf --retry-connrefused";
                     }
                   } >/dev/null; then
                     break
@@ -239,7 +243,10 @@ let
                         "Content-Type" = "application/json";
                       };
                       data = "$NEW_CLIENT";
-                      extraArgs = "-Sf";
+                      # --retry-connrefused: arr service may restart between GET and POST
+                      # (config service inside VM); ECONNREFUSED means server never saw
+                      # the request, so retrying the POST is safe.
+                      extraArgs = "-Sf --retry-connrefused";
                     }
                   } >/dev/null; then
                     break

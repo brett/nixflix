@@ -66,6 +66,8 @@ in
         inherit (microvmCfg) address;
         inherit (microvmCfg) vcpus;
         inherit (microvmCfg) memoryMB;
+        # VPN would block image proxies and Cloudflare CDN used for metadata.
+        vpnBypass = true;
         extraModules = [
           {
             nixflix = {
@@ -156,6 +158,24 @@ in
               };
             }
           )
+        ]
+        ++ [
+          {
+            networking.firewall.extraInputRules =
+              let
+                port = toString cfg.config.hostConfig.port;
+                hostAddr = config.nixflix.microvm.network.hostAddress;
+                prowlarrSuffix = optionalString
+                  (config.nixflix.prowlarr.enable && config.nixflix.prowlarr.microvm.enable)
+                  ", ${config.nixflix.prowlarr.microvm.address}";
+                jellyseerrSuffix = optionalString
+                  (serviceName != "lidarr" && config.nixflix.jellyseerr.enable && config.nixflix.jellyseerr.microvm.enable)
+                  ", ${config.nixflix.jellyseerr.microvm.address}";
+              in
+              ''
+                ip saddr { ${hostAddr}${prowlarrSuffix}${jellyseerrSuffix} } tcp dport ${port} accept
+              '';
+          }
         ]
         ++ [
           # Guest-side readiness gate: blocks multi-user.target (and vsock READY=1)
