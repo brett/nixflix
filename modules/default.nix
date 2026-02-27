@@ -30,6 +30,17 @@ in
   options.nixflix = {
     enable = mkEnableOption "Nixflix";
 
+    isGuest = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Whether this NixOS instance is running as a nixflix microVM guest.
+        Set automatically by the microVM infrastructure in common-guest.nix.
+        Used to suppress host-only assertions (e.g. jellyseerr requires
+        jellyfin.enable, but in a VM jellyfin lives in a separate VM).
+      '';
+    };
+
     serviceDependencies = mkOption {
       type = types.listOf types.str;
       default = [ ];
