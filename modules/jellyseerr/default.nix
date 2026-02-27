@@ -36,7 +36,9 @@ in
       in
       [
         {
-          assertion = config.nixflix.jellyfin.enable;
+          # In microVM mode jellyfin runs in its own VM — suppress the assertion
+          # for guests where nixflix.isGuest = true (set by common-guest.nix).
+          assertion = config.nixflix.jellyfin.enable || config.nixflix.isGuest;
           message = "Jellyseerr requires Jellyfin to be enabled. Please set nixflix.jellyfin.enable = true.";
         }
         {
