@@ -2,9 +2,33 @@
 with lib;
 {
   options.nixflix.globals = mkOption {
-    type = types.attrs;
     description = "Global values to be used by nixflix services";
     default = { };
+    # freeform submodule: microVMHostConfigurations/serviceAddresses get typed options
+    # so multiple modules can each add entries without `//` clobbering prior contributions.
+    type = types.submodule {
+      freeformType = types.attrs;
+
+      options.microVMHostConfigurations = mkOption {
+        type = types.attrsOf types.anything;
+        default = { };
+        description = ''
+          MicroVM support: services register here to opt into VM isolation.
+          Each entry maps a service name to { module, address, vcpus, memoryMB }.
+          Uses attrsOf so that multiple modules can each add their own entry
+          without overwriting the others.
+        '';
+      };
+
+      options.serviceAddresses = mkOption {
+        type = types.attrsOf types.str;
+        default = { };
+        description = ''
+          MicroVM support: services register their VM address here.
+          Used by downloadarr and other integrations to reach VM-isolated services.
+        '';
+      };
+    };
   };
 
   config.nixflix.globals = {
