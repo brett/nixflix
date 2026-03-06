@@ -138,7 +138,7 @@ let
                 "username"
                 "password"
               ];
-              fieldOverrides = filterAttrs (name: value: value != null && !hasPrefix "_" name) allOverrides;
+              fieldOverrides = filterAttrs (name: value: value != null && value != "" && !hasPrefix "_" name) allOverrides;
               fieldOverridesJson = builtins.toJSON fieldOverrides;
 
               jqSecrets = secrets.mkJqSecretArgs {
