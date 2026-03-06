@@ -26,6 +26,24 @@ VM tests spin up actual NixOS virtual machines and test the full service stack, 
 - Configuration service execution
 - Multi-service integration
 
+#### MicroVM Tests
+
+Four additional tests cover microVM isolation. They are defined in `tests/vm-tests/microvm-*.nix` and require the `microvmModules` attribute to be wired through from the flake (see `tests/default.nix`). When `microvmModules` is not provided they skip trivially and do not appear in `nix flake check`.
+
+| Test | What it covers |
+|------|---------------|
+| `microvm-basic` | Sonarr + PostgreSQL VMs start, API reachable from host |
+| `microvm-networking` | Bridge (`nixflix-br0`), inter-VM TCP connectivity |
+| `microvm-full-stack` | All VMs, nginx routing, downloadarr, prowlarr apps |
+| `microvm-vpn-bypass` | nftables Mullvad bypass marks present for all VM IPs |
+
+MicroVM tests use nested KVM (`-cpu host` QEMU flag + `kvm-intel`/`kvm-amd` kernel modules). They **must** run one at a time — parallel execution causes qemu resource contention.
+
+```bash
+# Run a microvm test (requires KVM on the build host)
+nix build -L .#checks.x86_64-linux.microvm-basic
+```
+
 ### 2. Unit Tests (Configuration Tests)
 
 Unit tests verify that NixOS module options generate correct systemd service definitions without actually running the services. They validate:
