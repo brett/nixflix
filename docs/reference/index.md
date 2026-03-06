@@ -52,3 +52,14 @@ Each option is documented with:
 - [Mullvad VPN](mullvad/index.md) - VPN configuration
 - [PostgreSQL](postgres/index.md) - Database configuration
 - [Recyclarr](recyclarr/index.md) - TRaSH guides automation
+
+### MicroVM Isolation (opt-in)
+
+Import `nixflix.nixosModules.microvm` to enable microVM support. Each service then gains a `microvm` sub-option:
+
+- `nixflix.microvm` - Global settings (hypervisor, network bridge, subnet, VPN bypass)
+- `nixflix.<service>.microvm.enable` - Run this service in an isolated VM
+- `nixflix.<service>.microvm.address` - Static IP (defaults from `nixflix.microvm.addresses.<service>`)
+- `nixflix.<service>.microvm.vcpus` / `.memoryMB` - VM sizing
+
+See the [MicroVM Setup Example](../examples/microvm-setup.md) for usage.

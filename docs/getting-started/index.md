@@ -51,6 +51,9 @@ Add Nixflix as an input to your `flake.nix`:
       modules = [
         ./configuration.nix
         nixflix.nixosModules.default
+
+        # Optional: run services in isolated microVMs (requires KVM)
+        # nixflix.nixosModules.microvm
       ];
     };
   };
@@ -116,4 +119,5 @@ Here's a minimal configuration to get started:
 ## Next Steps
 
 - Review the [Basic Setup Example](../examples/basic-setup.md) for a complete configuration
+- See the [MicroVM Setup Example](../examples/microvm-setup.md) to run services in isolated VMs
 - See the [Options Reference](../reference/index.md) for all available settings

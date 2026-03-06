@@ -39,6 +39,28 @@ Four additional tests cover microVM isolation. They are defined in `tests/vm-tes
 
 MicroVM tests use nested KVM (`-cpu host` QEMU flag + `kvm-intel`/`kvm-amd` kernel modules). They **must** run one at a time — parallel execution causes qemu resource contention.
 
+#### KVM sandbox requirement
+
+The Nix sandbox does not expose `/dev/kvm` to builds by default. Without it, the outer test VM runs without KVM, nested virtualization is unavailable, and the inner microVMs run under full software emulation — making multi-VM tests extremely slow and prone to timeout failures.
+
+To allow the build sandbox access to `/dev/kvm`, add the following to your NixOS configuration:
+
+```nix
+nix.settings.extra-sandbox-paths = [ "/dev/kvm" ];
+```
+
+Or in `/etc/nix/nix.conf`:
+
+```
+extra-sandbox-paths = /dev/kvm
+```
+
+You can verify nested KVM is active by checking the test log for `kvm_amd: Nested Virtualization enabled` or `kvm_intel: Nested Virtualization enabled` after a test run:
+
+```bash
+nix log /nix/store/<drv-hash>-vm-test-run-microvm-*.drv | grep -i "nested\|kvm_amd\|kvm_intel"
+```
+
 ```bash
 # Run a microvm test (requires KVM on the build host)
 nix build -L .#checks.x86_64-linux.microvm-basic
