@@ -18,9 +18,11 @@ let
       ;
   };
   baseUrl = "http://127.0.0.1:${toString cfg.port}";
+  adminUsers = filterAttrs (_: user: user.policy.isAdministrator) jellyfinCfg.users;
+  hasAdminUsers = adminUsers != { };
 in
 {
-  config = mkIf (nixflix.enable && cfg.enable && nixflix.jellyfin.enable) {
+  config = mkIf (nixflix.enable && cfg.enable && hasAdminUsers) {
     systemd.services.jellyseerr-jellyfin = {
       description = "Configure Jellyfin settings in Jellyseerr";
       after = [

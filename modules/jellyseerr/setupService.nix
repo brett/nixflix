@@ -12,9 +12,12 @@ let
   jellyfinCfg = nixflix.jellyfin;
 
   adminUsers = filterAttrs (_: user: user.policy.isAdministrator) jellyfinCfg.users;
-  sortedAdminNames = sort (a: b: a < b) (attrNames adminUsers);
-  firstAdminName = head sortedAdminNames;
-  firstAdminUser = adminUsers.${firstAdminName};
+  hasAdminUsers = adminUsers != { };
+  # Guard head/attrset against empty adminUsers: in the jellyseerr guest,
+  # jellyfin.enable = false but users are injected via extraModules.
+  sortedAdminNames = optionals hasAdminUsers (sort (a: b: a < b) (attrNames adminUsers));
+  firstAdminName = if hasAdminUsers then head sortedAdminNames else "";
+  firstAdminUser = if hasAdminUsers then adminUsers.${firstAdminName} else { password = null; };
 
   authUtil = import ./authUtil.nix {
     inherit
@@ -30,17 +33,15 @@ let
   };
 in
 {
-  config = mkIf (nixflix.enable && cfg.enable && nixflix.jellyfin.enable) {
+  config = mkIf (nixflix.enable && cfg.enable && hasAdminUsers) {
     systemd.services.jellyseerr-setup = {
       description = "Complete Jellyseerr initial setup with Jellyfin";
       after = [
         "jellyseerr.service"
-        "jellyfin-setup-wizard.service"
-      ];
+      ] ++ optionals nixflix.jellyfin.enable [ "jellyfin-setup-wizard.service" ];
       requires = [
         "jellyseerr.service"
-        "jellyfin-setup-wizard.service"
-      ];
+      ] ++ optionals nixflix.jellyfin.enable [ "jellyfin-setup-wizard.service" ];
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig = {

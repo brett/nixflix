@@ -18,21 +18,21 @@ let
       ;
   };
   baseUrl = "http://127.0.0.1:${toString cfg.port}";
+  adminUsers = filterAttrs (_: user: user.policy.isAdministrator) jellyfinCfg.users;
+  hasAdminUsers = adminUsers != { };
 in
 {
-  config = mkIf (nixflix.enable && cfg.enable && nixflix.jellyfin.enable) {
+  config = mkIf (nixflix.enable && cfg.enable && hasAdminUsers) {
     systemd.services.jellyseerr-libraries = {
       description = "Sync Jellyseerr library selections";
       after = [
         "jellyseerr-setup.service"
         "jellyseerr-jellyfin.service"
-        "jellyfin-libraries.service"
-      ];
+      ] ++ optionals nixflix.jellyfin.enable [ "jellyfin-libraries.service" ];
       requires = [
         "jellyseerr-setup.service"
         "jellyseerr-jellyfin.service"
-        "jellyfin-libraries.service"
-      ];
+      ] ++ optionals nixflix.jellyfin.enable [ "jellyfin-libraries.service" ];
       wantedBy = [ "multi-user.target" ];
 
       serviceConfig = {
