@@ -173,7 +173,7 @@ in
           else
             "${getExe cfg.package} --datadir '${cfg.dataDir}' --configdir '${cfg.configDir}' --cachedir '${cfg.cacheDir}' --logdir '${cfg.logDir}'";
 
-        ExecStartPost = pkgs.writeShellScript "jellyfin-wait-ready" ''
+        ExecStartPost = "-${pkgs.writeShellScript "jellyfin-wait-ready" ''
           set -eu
 
           BASE_URL="${baseUrl}"
@@ -211,7 +211,8 @@ in
 
             sleep 1
           done
-        '';
+        ''}";
+
 
         NoNewPrivileges = true;
         LockPersonality = true;

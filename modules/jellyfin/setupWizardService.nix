@@ -45,6 +45,20 @@ in
 
         BASE_URL="${baseUrl}"
 
+        echo "Waiting for Jellyfin HTTP API to become ready..."
+        for attempt in $(seq 1 600); do
+          if ${pkgs.curl}/bin/curl -sf --connect-timeout 2 --max-time 5 \
+              "$BASE_URL/System/Info/Public" >/dev/null 2>&1; then
+            echo "Jellyfin API is ready (attempt $attempt)"
+            break
+          fi
+          if [ "$attempt" -eq 600 ]; then
+            echo "Timeout: Jellyfin API did not become ready after 600 seconds" >&2
+            exit 1
+          fi
+          sleep 1
+        done
+
         echo "Checking if first admin user needs to be created..."
 
         # Check if startup wizard is already completed via API

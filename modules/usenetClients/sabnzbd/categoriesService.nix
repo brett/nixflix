@@ -41,7 +41,7 @@ in
           for param in "$@"; do
             url="$url&$param"
           done
-          curl -K - -s <<CONFIG
+          curl -K - -s --connect-timeout 5 --max-time 15 <<CONFIG
         url = $url
         CONFIG
         }
