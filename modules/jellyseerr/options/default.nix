@@ -19,7 +19,23 @@ in
   options.nixflix.jellyseerr = {
     enable = mkEnableOption "Jellyseerr media request manager";
 
-    package = mkPackageOption pkgs "jellyseerr" { };
+    package = lib.mkOption {
+      type = lib.types.package;
+      # Jellyseerr 2.7.3 only sends X-Emby-Authorization, which Jellyfin 10.12+ ignores
+      # (enableLegacyAuthorization defaults to false). Remove once nixpkgs ships Seerr v3.0.0 (#58).
+      default = pkgs.jellyseerr.overrideAttrs (old: {
+        postInstall =
+          (old.postInstall or "")
+          + ''
+            substituteInPlace $out/share/dist/api/jellyfin.js \
+              --replace-fail \
+                "'X-Emby-Authorization': authHeaderVal," \
+                "'X-Emby-Authorization': authHeaderVal, Authorization: authHeaderVal,"
+          '';
+      });
+      defaultText = lib.literalExpression "pkgs.jellyseerr (patched for Jellyfin auth)";
+      description = "Jellyseerr package to use.";
+    };
 
     apiKey = secrets.mkSecretOption {
       nullable = true;
