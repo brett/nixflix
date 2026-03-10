@@ -87,7 +87,7 @@ let
           SCHEMAS=$(${
             mkSecureCurl serviceConfig.apiKey {
               url = "$BASE_URL/downloadclient/schema";
-              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-max-time 120";
+              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-all-errors --retry-max-time 120";
             }
           })
 
@@ -96,7 +96,7 @@ let
           DOWNLOAD_CLIENTS=$(${
             mkSecureCurl serviceConfig.apiKey {
               url = "$BASE_URL/downloadclient";
-              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-max-time 120";
+              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-all-errors --retry-max-time 120";
             }
           })
 
@@ -138,7 +138,9 @@ let
                 "username"
                 "password"
               ];
-              fieldOverrides = filterAttrs (name: value: value != null && value != "" && !hasPrefix "_" name) allOverrides;
+              fieldOverrides = filterAttrs (
+                name: value: value != null && value != "" && !hasPrefix "_" name
+              ) allOverrides;
               fieldOverridesJson = builtins.toJSON fieldOverrides;
 
               jqSecrets = secrets.mkJqSecretArgs {
@@ -194,9 +196,8 @@ let
                       "Content-Type" = "application/json";
                     };
                     data = "$UPDATED_CLIENT";
-                    # --retry: arr service may restart between GET and PUT (config
-                    # service inside VM); retry handles ECONNREFUSED on that window.
-                    extraArgs = "-Sf --retry 5 --retry-delay 10 --retry-connrefused --retry-max-time 120";
+                    # arr restart causes transient ECONNREFUSED/4xx; --retry-all-errors covers both.
+                    extraArgs = "-Sf --retry 5 --retry-delay 10 --retry-connrefused --retry-all-errors --retry-max-time 120";
                   }
                 } >/dev/null
 
@@ -221,10 +222,9 @@ let
                       "Content-Type" = "application/json";
                     };
                     data = "$NEW_CLIENT";
-                    # --retry: arr service may restart between GET and POST (config
-                    # service inside VM); ECONNREFUSED means server never saw the
-                    # request, so retrying the POST is safe.
-                    extraArgs = "-Sf --retry 5 --retry-delay 10 --retry-connrefused --retry-max-time 120";
+                    # arr restart causes transient errors; retrying POST is safe because
+                    # ECONNREFUSED means the server never received the request.
+                    extraArgs = "-Sf --retry 5 --retry-delay 10 --retry-connrefused --retry-all-errors --retry-max-time 120";
                   }
                 } >/dev/null
 
