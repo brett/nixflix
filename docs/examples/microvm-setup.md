@@ -218,6 +218,106 @@ The following runs every service in its own VM:
 All inter-service connections (arr→postgres, arr→prowlarr, arr→download clients, jellyseerr→arr)
 are wired automatically using the static VM IP addresses.
 
+## Jellyfin GPU Passthrough (VFIO)
+
+By default, the Jellyfin microVM has no GPU access and falls back to software transcoding.
+For hardware-accelerated transcoding, you can pass a GPU directly into the VM via VFIO.
+
+> **The host loses access to this GPU while the VM is running.** On a single-GPU system,
+> this means no host display for the duration. Two-GPU systems (e.g. Intel iGPU for display,
+> NVIDIA dGPU for transcoding) are not affected.
+
+### Host Prerequisites
+
+Enable IOMMU in your bootloader and load the VFIO kernel module:
+
+```nix
+# Intel CPU
+boot.kernelParams = [ "intel_iommu=on" ];
+
+# AMD CPU
+boot.kernelParams = [ "amd_iommu=on" ];
+```
+
+Find the BDF address of the GPU you want to pass through:
+
+```sh
+lspci -nn | grep -iE "vga|3d|display"
+# example output: 01:00.0 VGA compatible controller [0300]: NVIDIA ...
+# BDF address is: 0000:01:00.0
+```
+
+Verify the device is in its own IOMMU group (other devices in the same group must also be
+passed through, or the group must contain only this device):
+
+```sh
+for d in /sys/kernel/iommu_groups/*/devices/*; do
+  echo "$(basename $(dirname $(dirname $d))): $(lspci -nns $(basename $d))"; done | sort -V
+```
+
+### Nixflix Configuration
+
+```nix
+{
+  nixflix.jellyfin = {
+    enable = true;
+    microvm = {
+      enable = true;
+      gpuDevice = "0000:01:00.0";   # BDF from lspci above
+    };
+
+    encoding = {
+      enableHardwareEncoding = true;
+      hardwareAccelerationType = "vaapi";   # Intel/AMD
+      # hardwareAccelerationType = "nvenc"; # NVIDIA
+      # hardwareAccelerationType = "qsv";   # Intel Quick Sync
+    };
+  };
+
+  # Add GPU driver packages for the guest. nixflix injects these into the
+  # Jellyfin VM automatically via the microvm extraModules mechanism.
+  nixflix.jellyfin.microvm.extraModules = [
+    {
+      hardware.graphics.extraPackages = [
+        pkgs.intel-media-driver   # Intel VAAPI/QSV (Broadwell+)
+        # pkgs.libva-mesa-driver  # AMD VAAPI
+        # pkgs.nvidia-vaapi-driver # NVIDIA VAAPI (open driver)
+      ];
+    }
+  ];
+}
+```
+
+> `nixflix.jellyfin.microvm.extraModules` is a standard escape hatch for any guest NixOS
+> configuration not covered by built-in options.
+
+### Alternative: Run Jellyfin on the Host
+
+If you don't need VM isolation for Jellyfin, running it on the host gives native GPU access
+with no VFIO complexity:
+
+```nix
+{
+  nixflix.jellyfin = {
+    enable = true;
+    microvm.enable = false;   # host mode (default)
+
+    encoding = {
+      enableHardwareEncoding = true;
+      hardwareAccelerationType = "vaapi";
+    };
+  };
+
+  hardware.graphics = {
+    enable = true;
+    extraPackages = [ pkgs.intel-media-driver ];
+  };
+}
+```
+
+All other services (arr apps, postgres, qBittorrent) can still run in microVMs while
+Jellyfin runs on the host. The inter-service connections are wired automatically.
+
 ## Troubleshooting
 
 **VM fails to start**: Check `journalctl -u microvm@sonarr.service` on the host.

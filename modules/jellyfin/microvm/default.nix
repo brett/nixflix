@@ -43,6 +43,30 @@ in
       '';
     };
 
+    gpuDevice = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "0000:01:00.0";
+      description = ''
+        PCI BDF address of a GPU to pass through to the Jellyfin microVM via VFIO.
+        When set, the GPU is detached from its host driver at VM start and assigned
+        exclusively to the Jellyfin VM, enabling hardware-accelerated transcoding.
+
+        Find the address with: lspci -nn | grep -i vga
+
+        The host loses access to this GPU while the VM is running. For a
+        single-GPU system this means no host display during Jellyfin's lifetime.
+        Two-GPU systems (e.g. iGPU for display, dGPU for transcoding) are not
+        affected.
+
+        Requires IOMMU support on the host:
+          boot.kernelParams = [ "intel_iommu=on" ];  # Intel
+          boot.kernelParams = [ "amd_iommu=on" ];    # AMD
+
+        Also configure nixflix.jellyfin.encoding.hardwareAccelerationType and
+        hardware.graphics.extraPackages for the appropriate GPU driver.
+      '';
+    };
   };
 
   config = mkMerge [
@@ -51,6 +75,10 @@ in
         {
           assertion = !microvmCfg.enable || config.nixflix.microvm.enable;
           message = "nixflix.jellyfin.microvm.enable requires nixflix.microvm.enable = true";
+        }
+        {
+          assertion = microvmCfg.gpuDevice == null || microvmCfg.enable;
+          message = "nixflix.jellyfin.microvm.gpuDevice requires nixflix.jellyfin.microvm.enable = true";
         }
       ];
     }
@@ -106,8 +134,17 @@ in
             systemd.services.jellyfin.serviceConfig.StandardOutput = lib.mkForce "journal+console";
             systemd.services.jellyfin.serviceConfig.StandardError = lib.mkForce "journal+console";
           }
+        ] ++ optionals (microvmCfg.gpuDevice != null) [
+          {
+            # microvm.nix unbinds the device from its host driver before handing it to the guest.
+            microvm.devices = [ { bus = "pci"; path = microvmCfg.gpuDevice; } ];
+            hardware.graphics.enable = true;
+          }
         ];
       };
+
+      # VFIO requires the host kernel to have vfio-pci loaded before VM start.
+      boot.kernelModules = optionals (microvmCfg.gpuDevice != null) [ "vfio" "vfio-pci" ];
 
       nixflix.globals.serviceAddresses.jellyfin = microvmCfg.address;
 
