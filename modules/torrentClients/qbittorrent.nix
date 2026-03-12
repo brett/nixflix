@@ -87,6 +87,7 @@ in
         };
 
         password = secrets.mkSecretOption {
+          nullable = true;
           description = ''
             The password for qbittorrent. This is for the other services to integrate with qBittorrent.
             Not for setting the password in qBittorrent

@@ -102,10 +102,16 @@ in
       };
 
       acme = {
-        enable = mkOption {
-          type = types.bool;
-          default = false;
-          description = "Whether to enable ACME/Let's Encrypt TLS certificates for nginx virtual hosts.";
+        enable = mkEnableOption "ACME/Let's Encrypt TLS certificates for all nixflix nginx virtual hosts";
+
+        email = mkOption {
+          type = with types; nullOr str;
+          default = null;
+          example = "admin@example.com";
+          description = ''
+            Email address for Let's Encrypt certificate registration and renewal
+            notifications. Required when `nixflix.nginx.acme.enable` is true.
+          '';
         };
       };
     };
@@ -175,6 +181,13 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = !cfg.nginx.acme.enable || cfg.nginx.acme.email != null;
+        message = "nixflix.nginx.acme.email must be set when nixflix.nginx.acme.enable is true";
+      }
+    ];
+
     users.groups.media = {
       gid = globals.gids.media;
       members = cfg.mediaUsers;
@@ -211,6 +224,13 @@ in
       script = ''
         ${pkgs.systemd}/bin/systemd-tmpfiles --create
       '';
+    };
+
+    networking.firewall.allowedTCPPorts = mkIf cfg.nginx.enable [ 80 443 ];
+
+    security.acme = mkIf (cfg.nginx.enable && cfg.nginx.acme.enable) {
+      acceptTerms = true;
+      defaults.email = cfg.nginx.acme.email;
     };
 
     services.nginx = mkIf cfg.nginx.enable {
