@@ -249,6 +249,8 @@ in
       };
 
       nginx.virtualHosts."${hostname}" = mkIf config.nixflix.nginx.enable {
+        enableACME = config.nixflix.nginx.acme.enable;
+        forceSSL = config.nixflix.nginx.acme.enable;
         locations."/" =
           let
             themeParkUrl = "https://theme-park.dev/css/base/${serviceBase}/${config.nixflix.theme.name}.css";
@@ -378,17 +380,13 @@ in
           "network.target"
           "nixflix-setup-dirs.service"
         ]
-        ++ (optional (
-          cfg.config.apiKey != null && cfg.config.hostConfig.password != null
-        ) "${serviceName}-env.service")
+        ++ (optional (cfg.config.apiKey != null) "${serviceName}-env.service")
         ++ (optional config.services.postgresql.enable "postgresql-ready.target")
         ++ (optional config.nixflix.mullvad.enable "mullvad-config.service");
         requires = [
           "nixflix-setup-dirs.service"
         ]
-        ++ (optional (
-          cfg.config.apiKey != null && cfg.config.hostConfig.password != null
-        ) "${serviceName}-env.service")
+        ++ (optional (cfg.config.apiKey != null) "${serviceName}-env.service")
         ++ (optional config.services.postgresql.enable "postgresql-ready.target");
         wants = optional config.nixflix.mullvad.enable "mullvad-config.service";
         wantedBy = [ "multi-user.target" ];
@@ -401,7 +399,7 @@ in
           ExecStartPost = "+" + (mkWaitForApiScript serviceName cfg.config);
           Restart = "on-failure";
         }
-        // optionalAttrs (cfg.config.apiKey != null && cfg.config.hostConfig.password != null) {
+        // optionalAttrs (cfg.config.apiKey != null) {
           EnvironmentFile = "/run/${serviceName}/env";
         }
         // optionalAttrs (config.nixflix.mullvad.enable && !cfg.vpn.enable) {
@@ -416,7 +414,7 @@ in
         };
       };
     }
-    // optionalAttrs (cfg.config.apiKey != null && cfg.config.hostConfig.password != null) {
+    // optionalAttrs (cfg.config.apiKey != null) {
       "${serviceName}-env" = {
         description = "Setup ${capitalizedName} environment file";
         wantedBy = [ "${serviceName}.service" ];
@@ -436,7 +434,8 @@ in
           chmod 0400 /run/${serviceName}/env
         '';
       };
-
+    }
+    // optionalAttrs (cfg.config.apiKey != null && cfg.config.hostConfig.password != null) {
       "${serviceName}-config" = hostConfig.mkService cfg.config;
     }
     // optionalAttrs (usesMediaDirs && cfg.config.apiKey != null && cfg.config.rootFolders != [ ]) {

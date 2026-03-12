@@ -75,6 +75,12 @@ Nixflix is:
 
 Checkout the [documentation](https://kiriwalawren.github.io/nixflix/) to get started.
 
+### Deploying to Hetzner
+
+See [docs/hetzner-deploy.md](docs/hetzner-deploy.md) for the end-to-end workflow:
+provisioning a server, encrypting secrets, running the deploy script, verifying
+with integration tests, and tearing down.
+
 ## Services
 
 ### Starr Stack

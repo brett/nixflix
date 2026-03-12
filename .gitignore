@@ -7,3 +7,14 @@ docs/reference/*/
 mkdocs.yml
 
 .nixos-test-history
+
+# Age private keys — never commit
+deploy/secrets/*-age-key.txt
+deploy/secrets/keys/
+.sops.yaml
+
+# Gas Town (added by gt)
+.runtime/
+.claude/
+.logs/
+__pycache__/

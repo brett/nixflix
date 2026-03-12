@@ -192,6 +192,7 @@ let
       };
 
       password = secrets.mkSecretOption {
+        nullable = true;
         description = "Password for the download client.";
         default = config.nixflix.torrentClients.qbittorrent.password;
         defaultText = literalExpression "config.nixflix.torrentClients.qbittorrent.password";

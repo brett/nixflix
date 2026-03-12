@@ -160,6 +160,17 @@ in
       description = "Automatically connect to VPN on startup";
     };
 
+    bypassPorts = mkOption {
+      type = types.listOf types.port;
+      default = [ ];
+      example = [ 22 ];
+      description = ''
+        TCP ports whose traffic bypasses the Mullvad tunnel via nftables mark
+        rules. Use this to keep services like SSH reachable on the server's
+        public IP while all other traffic goes through the VPN.
+      '';
+    };
+
     killSwitch = {
       enable = mkEnableOption "VPN kill switch (lockdown mode) - blocks all traffic when VPN is down";
 
@@ -172,12 +183,70 @@ in
   };
 
   config = mkIf cfg.enable {
+    # src_valid_mark required so reply packets from bypass ports pass the source-address check.
+    boot.kernel.sysctl."net.ipv4.conf.all.src_valid_mark" = mkIf (cfg.bypassPorts != [ ]) 1;
+
+    networking.nftables = mkIf (cfg.bypassPorts != [ ]) {
+      enable = true;
+      tables."mullvad-bypass" = {
+        family = "inet";
+        content = ''
+          chain input {
+            # raw (-300): before Mullvad's INPUT filter (policy drop) — accepts bypass ports.
+            type filter hook input priority raw; policy accept;
+            tcp dport { ${concatMapStringsSep ", " toString cfg.bypassPorts} } accept
+            icmp type echo-request accept
+            icmpv6 type echo-request accept
+          }
+          chain prerouting {
+            # mangle (-150): after conntrack (-200), before rpfilter (-140).
+            # Sets fwmark so rpfilter uses main table (not VPN table) for bypass ports.
+            type filter hook prerouting priority mangle; policy accept;
+            tcp dport { ${concatMapStringsSep ", " toString cfg.bypassPorts} } ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+            icmp type echo-request ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+            icmpv6 type echo-request ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+          }
+          chain outgoing {
+            # mangle (-150): conntrack has run (ct mark readable); before Mullvad filter (0, policy drop).
+            type route hook output priority mangle; policy accept;
+            # Match by port/protocol directly (not ct mark) so the first packet is also bypassed.
+            tcp sport { ${concatMapStringsSep ", " toString cfg.bypassPorts} } ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+            icmp type echo-reply ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+            icmpv6 type echo-reply ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+            ct mark 0x00000f41 meta mark set 0x6d6f6c65
+            # Handle mullvad-exclude wrapper (split-tunnel processes).
+            meta mark 0x00080000 ct mark set 0x00000f41 meta mark set 0x6d6f6c65
+          }
+        '';
+      };
+    };
+
     services.resolved.enable = true;
 
     services.mullvad-vpn = {
       enable = true;
       enableExcludeWrapper = true;
       package = mullvadPkg;
+    };
+
+    systemd.services.mullvad-bypass-route = mkIf (cfg.bypassPorts != [ ]) {
+      description = "Persistent bypass routing rule for Mullvad VPN (survives relay rotation)";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      before = [ "mullvad-daemon.service" ];
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = pkgs.writeShellScript "mullvad-bypass-route-up" ''
+          ${pkgs.iproute2}/bin/ip   rule add fwmark 0x6d6f6c65 table main priority 10 2>/dev/null || true
+          ${pkgs.iproute2}/bin/ip -6 rule add fwmark 0x6d6f6c65 table main priority 10 2>/dev/null || true
+        '';
+        ExecStop = pkgs.writeShellScript "mullvad-bypass-route-down" ''
+          ${pkgs.iproute2}/bin/ip   rule del fwmark 0x6d6f6c65 table main priority 10 2>/dev/null || true
+          ${pkgs.iproute2}/bin/ip -6 rule del fwmark 0x6d6f6c65 table main priority 10 2>/dev/null || true
+        '';
+      };
     };
 
     systemd.services.mullvad-config = {
@@ -207,7 +276,7 @@ in
           ${optionalString (cfg.accountNumber != null) ''
             if ${mullvadPkg}/bin/mullvad account get | grep -q "Not logged in"; then
               echo "Logging in to Mullvad account..."
-              echo "${secrets.toShellValue cfg.accountNumber}" | ${mullvadPkg}/bin/mullvad account login
+              ${mullvadPkg}/bin/mullvad account login "${secrets.toShellValue cfg.accountNumber}"
 
               echo "Waiting for relay list to download..."
               for i in {1..30}; do
@@ -241,7 +310,13 @@ in
 
           ${optionalString cfg.autoConnect ''
             ${mullvadPkg}/bin/mullvad auto-connect set on
-            ${mullvadPkg}/bin/mullvad connect
+
+            # Skip connect if not logged in — mullvad connect while logged out triggers block-all lockdown.
+            if ${mullvadPkg}/bin/mullvad account get 2>/dev/null | grep -q "Not logged in"; then
+              echo "Mullvad account not logged in — skipping connect to avoid lockdown"
+            else
+              ${mullvadPkg}/bin/mullvad connect
+            fi
           ''}
 
           ${optionalString (!cfg.autoConnect) ''
