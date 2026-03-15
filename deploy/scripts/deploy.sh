@@ -12,7 +12,8 @@
 #   -f, --flake <path>      Path to flake root (default: repo root)
 #   --no-age                Skip copying age key (if sops is not in use)
 #   --hcloud-token <token>  Hetzner Cloud API token (or set HETZNER_CLOUD_TOKEN)
-#                           Used to disable rescue mode before rebooting.
+#                           For Hetzner Cloud VMs only — disables rescue mode before rebooting.
+#                           Not needed for Hetzner Robot dedicated servers.
 #   -h, --help              Show this help text
 #
 # REQUIREMENTS
@@ -90,11 +91,11 @@ for s in data.get('servers', []):
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -c|--config)      CONFIG="$2";      shift 2 ;;
-    -k|--age-key)     AGE_KEY_PATH="$2"; shift 2 ;;
-    -f|--flake)       FLAKE_ROOT="$2";  shift 2 ;;
-    --no-age)         SKIP_AGE=true;    shift ;;
-    --hcloud-token)   HCLOUD_TOKEN="$2"; shift 2 ;;
+    -c|--config)      CONFIG="$2";        shift 2 ;;
+    -k|--age-key)     AGE_KEY_PATH="$2";  shift 2 ;;
+    -f|--flake)       FLAKE_ROOT="$2";    shift 2 ;;
+    --no-age)         SKIP_AGE=true;      shift ;;
+    --hcloud-token)   HCLOUD_TOKEN="$2";  shift 2 ;;
     -h|--help)        usage 0 ;;
     -*)               die "Unknown option: $1" ;;
     *)
@@ -133,9 +134,9 @@ if [[ "$SKIP_AGE" == false ]]; then
   echo "  Age key:   ${AGE_KEY_PATH}"
 fi
 if [[ "$HAVE_HCLOUD" == true ]]; then
-  echo "  hcloud:    enabled (will disable rescue before reboot)"
+  echo "  hcloud:    enabled (will disable rescue before reboot; Hetzner Cloud only)"
 else
-  echo "  hcloud:    disabled (pass --hcloud-token or set HETZNER_CLOUD_TOKEN to auto-disable rescue)"
+  echo "  hcloud:    disabled (Robot/dedicated: disable rescue manually before rebooting)"
 fi
 echo ""
 
@@ -144,6 +145,25 @@ echo "Checking SSH connectivity..."
 ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "root@$SERVER_IP" true \
   || die "Cannot connect to root@$SERVER_IP. Is the server in rescue mode?"
 echo "SSH OK"
+echo ""
+
+# ── Disk detection ────────────────────────────────────────────────────────────
+
+# Detect primary disk for informational purposes and sanity-check against the
+# disk device baked into the flake config (diskDevice specialArg in flake.nix).
+# nixos-anywhere uses the Nix config's disko device directly — we can't override
+# it at deploy time without rebuilding, so this is validation only.
+echo "Detecting primary disk on rescue console..."
+DETECTED_DISK=$(ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "root@$SERVER_IP" \
+  'DEV=$(lsblk -dpno NAME,TYPE | awk '"'"'$2=="disk"{print $1}'"'"' | head -1)
+   [ -n "$DEV" ] || { echo "no disk found" >&2; exit 1; }
+   BY_ID=$(ls /dev/disk/by-id/ | grep -v part | while read -r id; do
+     [ "$(readlink -f "/dev/disk/by-id/$id")" = "$DEV" ] && echo "/dev/disk/by-id/$id" && break
+   done)
+   echo "${BY_ID:-$DEV}"') \
+  || { echo "Warning: could not detect disk (continuing anyway)"; DETECTED_DISK="unknown"; }
+echo "  Detected: $DETECTED_DISK"
+echo "  (disk device configured via diskDevice in flake.nix)"
 echo ""
 
 # ── Deploy ────────────────────────────────────────────────────────────────────

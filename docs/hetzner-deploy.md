@@ -110,33 +110,25 @@ This decrypts the file in-memory, opens your `$EDITOR`, and re-encrypts on save.
 | `deploy/secrets/mullvad.yaml` | `account_number` — Mullvad VPN account number |
 | `deploy/secrets/arr.yaml` | `prowlarr_api_key`, `sonarr_api_key`, `sonarr_anime_api_key`, `radarr_api_key`, `lidarr_api_key` |
 | `deploy/secrets/admin.yaml` | `jellyfin_admin_password`, `jellyseerr_admin_password`, `sabnzbd_api_key` |
+| `deploy/secrets/local.yaml` | SSH keys, domain, ACME email, disk device, server IP |
 
-### Set your SSH public key
+### Populate local configuration
 
-Open `flake.nix` and add your SSH public key to `sshKeys`:
+SSH keys, domain, ACME email, disk device, and server IP are stored in `deploy/secrets/local.yaml`
+(sops-encrypted). Run the init script to decrypt it and generate `deploy/local.nix`:
 
-```nix
-specialArgs = {
-  hostName = "hetzner-bare";
-  sshKeys = [
-    "ssh-ed25519 AAAA... you@yourhost"
-  ];
-};
+```bash
+./deploy/scripts/init-local.sh
 ```
 
-### Set your domain and ACME email
+The script also runs `git update-index --skip-worktree deploy/local.nix` so the generated file
+with real values is never accidentally committed.
 
-In `deploy/configs/hetzner-bare.nix`, replace the placeholder domain and email:
+To update any of these values, edit `local.yaml` with sops, then re-run `init-local.sh`:
 
-```nix
-nginx = {
-  enable = true;
-  domain = "media.example.com";
-  acme = {
-    enable = true;
-    email = "admin@example.com";
-  };
-};
+```bash
+SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops deploy/secrets/local.yaml
+./deploy/scripts/init-local.sh
 ```
 
 ### Add a wildcard DNS record
@@ -245,12 +237,17 @@ HETZNER_CLOUD_TOKEN=<token> ./deploy/scripts/deploy.sh <server-ip> \
 After the initial deploy, push configuration changes without a full reinstall:
 
 ```bash
-nix shell nixpkgs#nixos-rebuild --command \
-  nixos-rebuild switch --target-host root@<server-ip> --flake .#hetzner-bare
+nix run .#rebuild -- hetzner-bare-microvm <server-ip>
 ```
 
 This builds the new config locally, copies it to the server, and activates it in-place.
 No reboot required unless the kernel changes.
+
+For a quick health overview after deploying:
+
+```bash
+nix run .#status -- <server-ip>
+```
 
 ---
 
@@ -259,24 +256,19 @@ No reboot required unless the kernel changes.
 After a successful deploy, verify the stack end-to-end:
 
 ```bash
-bash deploy/tests/integration.sh <server-ip>
+bash deploy/tests/integration-microvm.sh <server-ip>
 ```
 
-The script checks:
+The script runs 121 checks across these categories:
 
-- All systemd services are active with no crash loops
-- All expected ports respond (8989 Sonarr, 7878 Radarr, 8686 Lidarr, 9696 Prowlarr, etc.)
-- Arr API health endpoints return HTTP 200
-- nginx proxying is functional
-- Mullvad daemon is running and the kill switch is active
-- ZFS pool health (`zpool status`)
+- Host services and microVM services are active with no crash loops
+- VPN routing and Mullvad kill switch
+- Arr API health endpoints
+- ZFS pool health
+- Postgres firewall rules
+- qBittorrent connectivity
 
 The script exits non-zero on any failure. Review the output for details.
-
-!!! note
-    The integration test script (`deploy/tests/integration.sh`) is tracked in
-    [ni-eqm](https://github.com/kiriwalawren/nixflix/issues). See that issue for
-    implementation status.
 
 ---
 
@@ -414,6 +406,15 @@ status if connectivity is lost after Mullvad reconnects:
 ```bash
 systemctl status mullvad-bypass-route.service
 ip rule show   # should include: 50: from all fwmark 0x6d6f6c65 lookup main
+```
+
+After an incremental deploy (`switch-to-configuration`), nftables reloads and previously
+this would clear Mullvad's ip rules, breaking DNS. This is now fixed automatically:
+`mullvad-daemon` restarts after every nftables reload via
+`systemd.services.mullvad-daemon.restartTriggers`. If the issue persists unexpectedly:
+
+```bash
+systemctl restart mullvad-daemon.service
 ```
 
 **Port not responding**

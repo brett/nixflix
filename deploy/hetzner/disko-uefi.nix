@@ -1,28 +1,17 @@
-# deploy/hetzner/disko.nix
+# deploy/hetzner/disko-uefi.nix
 #
-# ZFS disk layout for nixos-anywhere deployment on Hetzner.
+# ZFS disk layout for nixos-anywhere deployment on Hetzner dedicated servers (UEFI).
 #
-# Designed for single-disk servers (sda). The ZFS pool is named "rpool"
-# and uses a mirroring-capable dataset structure so a second vdev can be
-# added later without restructuring the pool.
+# Identical to disko.nix except the boot partition is a FAT32 EFI System
+# Partition (EF00) instead of a BIOS boot partition.
+#
+# Designed for single-disk servers. diskDevice is auto-detected by deploy.sh
+# and passed via nixos-anywhere's --disk flag. Default "/dev/sda" covers most
+# Hetzner dedicated servers.
 #
 # Partition layout (GPT):
 #   1 – 512 MiB  EFI System Partition (FAT32, /boot)
 #   2 – rest     ZFS partition (rpool)
-#
-# ZFS datasets:
-#   rpool/local/root   →  /          (blank snapshot for impermanence-ready)
-#   rpool/local/nix    →  /nix       (no atime, large working set)
-#   rpool/local/var    →  /var
-#   rpool/safe/home    →  /home      (separate for easy snapshot/backup policy)
-#
-# Usage:
-#   nix run github:nix-community/nixos-anywhere -- \
-#     --flake .#hetzner-host --disk-encryption-keys ... \
-#     root@<rescue-ip>
-#
-# diskDevice is auto-detected by deploy.sh (via lsblk on the rescue console)
-# and passed via nixos-anywhere's --disk flag. Default: /dev/sda.
 { diskDevice ? "/dev/sda", ... }:
 {
   disko.devices = {
@@ -33,17 +22,12 @@
         content = {
           type = "gpt";
           partitions = {
-            BIOS = {
-              size = "1M";
-              type = "EF02"; # BIOS boot — required for GRUB on GPT
-              # No filesystem; GRUB writes its stage 1.5 here.
-            };
-
-            boot = {
+            ESP = {
               size = "512M";
+              type = "EF00";
               content = {
                 type = "filesystem";
-                format = "ext4";
+                format = "vfat";
                 mountpoint = "/boot";
               };
             };
@@ -64,11 +48,8 @@
       rpool = {
         type = "zpool";
 
-        # Pool-level options tuned for Linux / NixOS on a single SSD/HDD.
-        # Mirror vdevs can be added later with:
-        #   zpool attach rpool <existing-disk-part> <new-disk-part>
         options = {
-          ashift = "12"; # 4 KiB sectors (safe default for SSD and HDD)
+          ashift = "12";
           autotrim = "on";
         };
 
@@ -79,12 +60,11 @@
           acltype = "posixacl";
           dnodesize = "auto";
           normalization = "formD";
-          mountpoint = "none"; # datasets control their own mountpoints
+          mountpoint = "none";
           canmount = "off";
         };
 
         datasets = {
-          # Container datasets (not mounted themselves)
           "local" = {
             type = "zfs_fs";
             options = {
@@ -101,19 +81,15 @@
             };
           };
 
-          # Root filesystem
           "local/root" = {
             type = "zfs_fs";
             mountpoint = "/";
             options = {
               mountpoint = "legacy";
             };
-            # Blank snapshot lets you implement opt-in persistence / impermanence
-            # later: zfs rollback -r rpool/local/root@blank
             postCreateHook = "zfs snapshot rpool/local/root@blank";
           };
 
-          # /nix — large, read-heavy; disable atime for performance
           "local/nix" = {
             type = "zfs_fs";
             mountpoint = "/nix";
@@ -123,7 +99,6 @@
             };
           };
 
-          # /var — logs, databases, state
           "local/var" = {
             type = "zfs_fs";
             mountpoint = "/var";
@@ -132,7 +107,6 @@
             };
           };
 
-          # /home — separate dataset for snapshot / backup policy
           "safe/home" = {
             type = "zfs_fs";
             mountpoint = "/home";

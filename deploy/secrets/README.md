@@ -10,6 +10,7 @@ Encrypted secret files are committed to the repository. The private key is never
 | `mullvad.yaml` | Mullvad VPN account number |
 | `arr.yaml` | API keys for Sonarr, Radarr, Prowlarr, Lidarr |
 | `admin.yaml` | Admin passwords for Jellyfin, Jellyseerr, SABnzbd |
+| `local.yaml` | SSH keys, domain, ACME email, disk device, server IP |
 
 ## Key Structure
 
@@ -78,6 +79,26 @@ The files in this directory contain placeholder (zeroed-out) values. Before depl
 # On the target host (or using the public key)
 nix shell nixpkgs#ssh-to-age --command \
   ssh-to-age < /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+## Local Configuration
+
+`deploy/local.nix` is tracked in git with placeholder values. To generate it with real values,
+run:
+
+```bash
+./deploy/scripts/init-local.sh
+```
+
+The script decrypts `local.yaml` and overwrites `deploy/local.nix` with the real values. It
+also runs `git update-index --skip-worktree deploy/local.nix` so git ignores the local changes
+and they are never accidentally committed.
+
+To update values: edit `local.yaml` with sops, then re-run `init-local.sh`:
+
+```bash
+SOPS_AGE_KEY_FILE=~/.config/sops/age/keys.txt sops deploy/secrets/local.yaml
+./deploy/scripts/init-local.sh
 ```
 
 ## NixOS Configuration

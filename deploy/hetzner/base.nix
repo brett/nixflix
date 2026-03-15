@@ -44,8 +44,7 @@ in
   boot.loader.grub = {
     enable = true;
     device = "nodev";
-    # disko also sets devices from the disk config; mkForce wins the merge.
-    devices = lib.mkForce [ "/dev/sda" ];
+    # disko sets boot.loader.grub.devices from disko.devices.disk.*.device.
   };
 
   # Hetzner Cloud VMs expose disks via virtio — required in initrd for ZFS pool import.
@@ -95,6 +94,8 @@ in
   # Downstream host configs should migrate to a named user.
   users.users.root.openssh.authorizedKeys.keys = sshKeys;
 
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+
   # ── System ──────────────────────────────────────────────────────────────────
 
   time.timeZone = "UTC";
@@ -102,6 +103,12 @@ in
   environment.systemPackages = with pkgs; [
     zfs # zpool / zfs CLI
     smartmontools # disk health monitoring
+    btop
+    socat
+    tmux
+    bat
+    (pkgs.writeShellScriptBin "nixflix-monitor" (builtins.readFile ../scripts/monitor.sh))
+    (pkgs.writeShellScriptBin "nixflix-check" (builtins.readFile ../tests/integration-microvm.sh))
   ];
 
   # Optional: automatic ZFS scrub on a weekly schedule.

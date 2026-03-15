@@ -62,15 +62,26 @@
           }
         );
     in
+    let
+      # Machine-specific values (disk device, SSH keys, domain, etc.) live in
+      # deploy/local.nix. It is tracked in git with placeholder values; run
+      # deploy/scripts/init-local.sh to overwrite with real values from the
+      # sops-encrypted deploy/secrets/local.yaml. The script also runs
+      # `git update-index --skip-worktree` so git ignores the local overwrite.
+      localConfig = if builtins.pathExists ./deploy/local.nix
+        then import ./deploy/local.nix
+        else {
+          domain     = "example.com";
+          acmeEmail  = "admin@example.com";
+          diskDevice = "/dev/disk/by-id/PLACEHOLDER-run-init-local-sh";
+          serverIp   = "0.0.0.0";
+          sshKeys    = [];
+        };
+    in
     {
       nixosModules.default = import ./modules;
       nixosModules.nixflix = import ./modules;
       nixosModules.microvm = import ./modules/microvm { inherit microvm; };
-
-      # Disko disk layout for Hetzner deployment.
-      # Consumers: include disko.nixosModules.disko + diskoConfigurations.hetzner
-      # in a nixosConfiguration, or run nixos-anywhere with --flake .#hetzner-host.
-      diskoConfigurations.hetzner = import ./deploy/hetzner/disko.nix;
 
       # ---------------------------------------------------------------------------
       # nixosConfigurations — deployable host configs
@@ -87,11 +98,11 @@
       nixosConfigurations.hetzner-bare = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
         specialArgs = {
-          hostName = "hetzner-bare";
-          # Add your SSH public key(s) here before deploying.
-          sshKeys = [
-            # "ssh-ed25519 AAAA... user@host"
-          ];
+          hostName   = "hetzner-bare";
+          diskDevice = localConfig.diskDevice;
+          sshKeys    = localConfig.sshKeys;
+          domain     = localConfig.domain;
+          acmeEmail  = localConfig.acmeEmail;
         };
         modules = [
           disko.nixosModules.disko
@@ -102,6 +113,24 @@
         ];
       };
 
+      nixosConfigurations.hetzner-bare-microvm = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        specialArgs = {
+          hostName   = "hetzner-bare";
+          diskDevice = localConfig.diskDevice;
+          sshKeys    = localConfig.sshKeys;
+          domain     = localConfig.domain;
+          acmeEmail  = localConfig.acmeEmail;
+        };
+        modules = [
+          disko.nixosModules.disko
+          ./deploy/hetzner/disko.nix
+          sops-nix.nixosModules.sops
+          self.nixosModules.nixflix
+          self.nixosModules.microvm
+          ./deploy/configs/hetzner-bare-microvm.nix
+        ];
+      };
 
       packages = perSystem (
         {
@@ -142,6 +171,33 @@
                   ]
                 }:$PATH"
                 exec ${self}/deploy/scripts/deploy.sh "$@"
+              ''
+            );
+          };
+          rebuild = {
+            type = "app";
+            program = toString (
+              pkgs.writeShellScript "rebuild" ''
+                export PATH="${
+                  lib.makeBinPath [
+                    pkgs.nixos-rebuild
+                    pkgs.openssh
+                  ]
+                }:$PATH"
+                exec nixos-rebuild switch --flake "${self}#''${1:-hetzner-bare-microvm}" \
+                  --target-host "root@''${2:?Usage: nix run .#rebuild -- <config> <host-ip>}" \
+                  "''${@:3}"
+              ''
+            );
+          };
+          status = {
+            type = "app";
+            program = toString (
+              pkgs.writeShellScript "status" ''
+                export PATH="${lib.makeBinPath [ pkgs.openssh ]}:$PATH"
+                HOST="''${1:?Usage: nix run .#status -- <host-ip>}"
+                exec ssh -t -o StrictHostKeyChecking=no "root@''${HOST}" \
+                  'bash -s' < ${self}/deploy/scripts/status.sh
               ''
             );
           };

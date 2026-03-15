@@ -15,6 +15,8 @@
 #   rpool/data/downloads →  /data/downloads
 {
   config,
+  domain ? "example.com",
+  acmeEmail ? "admin@example.com",
   ...
 }:
 {
@@ -33,7 +35,7 @@
     account_number = {
       sopsFile = ../secrets/mullvad.yaml;
     };
-    # Arr API keys
+    # Arr API keys and shared admin password
     prowlarr_api_key = {
       sopsFile = ../secrets/arr.yaml;
     };
@@ -48,6 +50,12 @@
     };
     lidarr_api_key = {
       sopsFile = ../secrets/arr.yaml;
+    };
+    arr_admin_password = {
+      sopsFile = ../secrets/arr.yaml;
+    };
+    sabnzbd_api_key = {
+      sopsFile = ../secrets/admin.yaml;
     };
   };
 
@@ -69,11 +77,10 @@
     nginx = {
       enable = true;
       # Replace with the real domain before deploying to production.
-      domain = "media.example.com";
+      domain = domain;
       acme = {
         enable = true;
-        # Replace with a real email before deploying to production.
-        email = "admin@example.com";
+        email = acmeEmail;
       };
     };
 
@@ -90,6 +97,10 @@
       enable = true;
       config = {
         hostConfig.port = 9696;
+        hostConfig.username = "admin";
+        hostConfig.password = {
+          _secret = config.sops.secrets.arr_admin_password.path;
+        };
         apiKey = {
           _secret = config.sops.secrets.prowlarr_api_key.path;
         };
@@ -101,6 +112,10 @@
       mediaDirs = [ "/data/media/tv" ];
       config = {
         hostConfig.port = 8989;
+        hostConfig.username = "admin";
+        hostConfig.password = {
+          _secret = config.sops.secrets.arr_admin_password.path;
+        };
         apiKey = {
           _secret = config.sops.secrets.sonarr_api_key.path;
         };
@@ -112,6 +127,10 @@
       mediaDirs = [ "/data/media/tv-anime" ];
       config = {
         hostConfig.port = 8990;
+        hostConfig.username = "admin";
+        hostConfig.password = {
+          _secret = config.sops.secrets.arr_admin_password.path;
+        };
         apiKey = {
           _secret = config.sops.secrets.sonarr_anime_api_key.path;
         };
@@ -123,6 +142,10 @@
       mediaDirs = [ "/data/media/movies" ];
       config = {
         hostConfig.port = 7878;
+        hostConfig.username = "admin";
+        hostConfig.password = {
+          _secret = config.sops.secrets.arr_admin_password.path;
+        };
         apiKey = {
           _secret = config.sops.secrets.radarr_api_key.path;
         };
@@ -134,6 +157,10 @@
       mediaDirs = [ "/data/media/music" ];
       config = {
         hostConfig.port = 8686;
+        hostConfig.username = "admin";
+        hostConfig.password = {
+          _secret = config.sops.secrets.arr_admin_password.path;
+        };
         apiKey = {
           _secret = config.sops.secrets.lidarr_api_key.path;
         };
@@ -147,5 +174,14 @@
       # via a sops secret (and add qbittorrent_password to deploy/secrets/admin.yaml)
       # before relying on the downloadarr integration.
     };
+
+    usenetClients.sabnzbd = {
+      enable = true;
+      settings.misc.api_key = {
+        _secret = config.sops.secrets.sabnzbd_api_key.path;
+      };
+    };
+
+    recyclarr.enable = true;
   };
 }
