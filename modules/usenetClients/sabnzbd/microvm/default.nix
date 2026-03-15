@@ -30,7 +30,7 @@ in
 
     memoryMB = mkOption {
       type = types.int;
-      default = config.nixflix.microvm.defaults.memoryMB;
+      default = 1024;
       description = "Memory in MB for the SABnzbd microVM";
     };
 
@@ -51,6 +51,16 @@ in
       ];
     }
     (mkIf isEnabled {
+      # virtiofsd shares this directory into the VM as /var/lib/sabnzbd.
+      # Must exist on the host before the VM starts.
+      systemd.tmpfiles.settings."10-nixflix-sabnzbd" = {
+        "${config.nixflix.stateDir}/sabnzbd".d = {
+          user = "sabnzbd";
+          group = "media";
+          mode = "0755";
+        };
+      };
+
       nixflix.globals.microVMHostConfigurations.sabnzbd = {
         module = ./configuration.nix;
         inherit (microvmCfg) address;
@@ -72,7 +82,7 @@ in
                       (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
                       ", ${config.nixflix.${svc}.microvm.address}"
                   )
-                  [ "sonarr" "sonarr-anime" "radarr" "lidarr" ];
+                  [ "sonarr" "sonarr-anime" "radarr" "lidarr" "prowlarr" ];
               in
               ''
                 ip saddr { ${hostAddr}${arrSuffixes} } tcp dport ${port} accept

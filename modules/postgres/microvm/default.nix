@@ -43,7 +43,7 @@ in
 
     memoryMB = mkOption {
       type = types.int;
-      default = config.nixflix.microvm.defaults.memoryMB;
+      default = 2048;
       description = "Memory in MB for the PostgreSQL microVM";
     };
   };
@@ -95,9 +95,8 @@ in
           }
           {
             # Scope each service to its own databases with trust auth.
-            # Access is enforced at the network level by the guest firewall below —
-            # only the listed VM IPs can reach port 5432, mirroring the Unix socket
-            # model used in the non-microVM setup (OS enforces who can connect).
+            # The host bridge IP is also trusted for all databases to allow
+            # administrative psql access from the host.
             services.postgresql.authentication = lib.mkAfter (
               lib.concatStrings (
                 map
@@ -126,22 +125,28 @@ in
                 ''
                   host jellyseerr jellyseerr ${config.nixflix.jellyseerr.microvm.address}/32 trust
                 ''
+              + ''
+                  host all all ${config.nixflix.microvm.network.hostAddress}/32 trust
+                ''
             );
           }
           {
             # nftables required for extraInputRules support.
             networking.nftables.enable = true;
             networking.firewall.enable = true;
-            networking.firewall.extraInputRules = lib.optionalString (enabledDbServices != [ ]) (
+            networking.firewall.extraInputRules =
               let
-                allowedIPs = lib.concatStringsSep ", " (
-                  map (svc: config.nixflix.${svc}.microvm.address) enabledDbServices
+                serviceIPs = lib.optionalString (enabledDbServices != [ ]) (
+                  lib.concatStringsSep ", " (
+                    map (svc: config.nixflix.${svc}.microvm.address) enabledDbServices
+                  )
                 );
+                hostAddr = config.nixflix.microvm.network.hostAddress;
+                allIPs = if enabledDbServices != [ ] then "${serviceIPs}, ${hostAddr}" else hostAddr;
               in
               ''
-                ip saddr { ${allowedIPs} } tcp dport 5432 accept
-              ''
-            );
+                ip saddr { ${allIPs} } tcp dport 5432 accept
+              '';
           }
         ];
       };
@@ -151,10 +156,17 @@ in
       # services.postgresql.enable = false suppresses user creation, but tmpfiles in postgres.nix needs it.
       services.postgresql.enable = mkForce false;
       users.users.postgres = {
+        # Pin to uid 71 (nixpkgs postgres default) so virtiofsd reports the same uid
+        # that the guest postgres process runs as. Without this, systemd-tmpfiles-resetup
+        # (triggered by nixos-rebuild switch) chowns /var/lib/nixflix/postgres to the
+        # dynamically-allocated host uid, which the guest postgres (uid 71) can't access.
+        uid = 71;
         isSystemUser = true;
         group = "postgres";
       };
-      users.groups.postgres = { };
+      users.groups.postgres = {
+        gid = 71; # Match guest postgres gid
+      };
 
       systemd.services = {
         postgresql = mkForce {

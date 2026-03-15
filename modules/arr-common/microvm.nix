@@ -35,7 +35,7 @@ in
 
     memoryMB = mkOption {
       type = types.int;
-      default = config.nixflix.microvm.defaults.memoryMB;
+      default = 2048;
       description = "Memory in MB for the ${capitalizedName} microVM";
     };
 
@@ -90,6 +90,16 @@ in
           # triggering Restart=on-failure before the service is ready.
           (_: {
             systemd.services."${serviceName}".serviceConfig.ExecStartPost = mkForce [ ];
+          })
+          # rootfolders/delayprofiles must wait until the API is fully stable after
+          # postgres migration (which can take several minutes). sonarr-guest-ready
+          # already polls with a 10-minute timeout, so ordering after it guarantees
+          # the API is ready before rootfolders/delayprofiles attempt their API calls.
+          (_: {
+            systemd.services."${serviceName}-rootfolders".after =
+              [ "${serviceName}-guest-ready.service" ];
+            systemd.services."${serviceName}-delayprofiles".after =
+              [ "${serviceName}-guest-ready.service" ];
           })
         ]
         ++ optionals (cfg ? mediaDirs && cfg.mediaDirs != [ ]) [

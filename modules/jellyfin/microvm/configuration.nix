@@ -6,7 +6,7 @@
 
   # Transcode segments are temporary but land in cacheDir (virtiofs-backed).
   # Enable segment deletion so finished segments don't accumulate on the host.
-  nixflix.jellyfin.encoding.enableSegmentDeletion = true;
+  nixflix.jellyfin.encoding.enableSegmentDeletion = lib.mkForce true;
 
   # Jellyfin 10.11.6+ requires ≥2 GiB free on both data AND cache dirs.
   # Redirect cache to virtiofs-backed path so statfs() reports host disk space

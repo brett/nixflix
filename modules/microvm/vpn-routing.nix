@@ -21,6 +21,17 @@ mkIf (cfg.enable && config.nixflix.mullvad.enable && bypassAddresses != [ ]) {
           ip saddr ${addr} meta mark set 0x6d6f6c65;
         '') bypassAddresses}
       }
+
+      # Mark host-originated traffic to the bridge subnet with the Mullvad bypass
+      # mark so that nginx and other host processes can reach microVM services.
+      # Without this, Mullvad's policy routing (ip rule: not fwmark → VPN table)
+      # drops packets destined for 10.100.0.0/24 since that subnet is not in the
+      # VPN routing table.
+      chain output {
+        type route hook output priority mangle; policy accept;
+        ip daddr ${cfg.network.subnet} ct mark set 0x00000f41;
+        ip daddr ${cfg.network.subnet} meta mark set 0x6d6f6c65;
+      }
     '';
   };
 }

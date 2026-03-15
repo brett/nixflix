@@ -60,7 +60,7 @@ in
 
     memoryMB = mkOption {
       type = types.int;
-      default = config.nixflix.microvm.defaults.memoryMB;
+      default = 2048;
       description = "Memory in MB for the Prowlarr microVM";
     };
 
@@ -116,6 +116,10 @@ in
         # window, triggering Restart=on-failure. Matches arr-common/microvm.nix for other arr services.
         (_: {
           systemd.services.prowlarr.serviceConfig.ExecStartPost = mkForce [ ];
+          # prowlarr-applications must wait until the API is confirmed ready.
+          # ExecStartPost is cleared above so prowlarr.service active ≠ API ready;
+          # prowlarr-guest-ready.service is the authoritative "API is up" gate.
+          systemd.services.prowlarr-applications.after = [ "prowlarr-guest-ready.service" ];
         })
         # Guest-side readiness gate: blocks multi-user.target until Prowlarr HTTP API is ready.
         (

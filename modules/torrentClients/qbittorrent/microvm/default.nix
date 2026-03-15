@@ -11,6 +11,7 @@ let
   microvmCfg = cfg.microvm;
   isEnabled = cfg.enable && microvmCfg.enable;
   hostname = "${cfg.subdomain}.${config.nixflix.nginx.domain}";
+  hasPassword = cfg.password != null;
 in
 {
   options.nixflix.torrentClients.qbittorrent.microvm = {
@@ -30,7 +31,7 @@ in
 
     memoryMB = mkOption {
       type = types.int;
-      default = config.nixflix.microvm.defaults.memoryMB;
+      default = 1024;
       description = "Memory in MB for the qBittorrent microVM";
     };
 
@@ -51,6 +52,16 @@ in
       ];
     }
     (mkIf isEnabled {
+      # virtiofsd shares this directory into the VM as /var/lib/qBittorrent.
+      # Must exist on the host before the VM starts.
+      systemd.tmpfiles.settings."10-nixflix-qbittorrent" = {
+        "${config.nixflix.stateDir}/qbittorrent".d = {
+          user = "qbittorrent";
+          group = "media";
+          mode = "0755";
+        };
+      };
+
       nixflix.globals.microVMHostConfigurations.qbittorrent = {
         module = ./configuration.nix;
         inherit (microvmCfg) address;
@@ -71,7 +82,7 @@ in
                       (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
                       ", ${config.nixflix.${svc}.microvm.address}"
                   )
-                  [ "sonarr" "sonarr-anime" "radarr" "lidarr" ];
+                  [ "sonarr" "sonarr-anime" "radarr" "lidarr" "prowlarr" ];
               in
               ''
                 ip saddr { ${hostAddr}${arrSuffixes} } tcp dport ${port} accept
@@ -83,6 +94,8 @@ in
               # The host bridge IP is intentionally excluded: nginx proxies user requests
               # from 10.100.0.1, and whitelisting it would bypass qBittorrent's WebUI auth
               # for all proxied browser sessions.
+              # LocalhostAuth=false lets the guest-side setup service call the API to
+              # apply the WebUI password without needing to authenticate first.
               serverConfig = lib.recursiveUpdate cfg.serverConfig {
                 Preferences.WebUI.AuthSubnetWhitelistEnabled = true;
                 Preferences.WebUI.AuthSubnetWhitelist = lib.concatStringsSep ","
@@ -90,7 +103,8 @@ in
                     if (config.nixflix.${svc}.enable or false) && (config.nixflix.${svc}.microvm.enable or false)
                     then config.nixflix.${svc}.microvm.address
                     else ""
-                  ) [ "sonarr" "sonarr-anime" "radarr" "lidarr" ]));
+                  ) [ "sonarr" "sonarr-anime" "radarr" "lidarr" "prowlarr" ]));
+                Preferences.WebUI.LocalhostAuth = false;
               };
               inherit (cfg) password;
               inherit (cfg) webuiPort;
@@ -102,8 +116,6 @@ in
           (
             let
               port = cfg.webuiPort;
-              hasPassword = cfg.password != null;
-              passwordSetup = optionalString hasPassword "PASSWORD=${secrets.toShellValue cfg.password}";
               username = cfg.serverConfig.Preferences.WebUI.Username or "admin";
             in
             { pkgs, ... }:
@@ -118,39 +130,105 @@ in
                   TimeoutStartSec = "5min";
                   ExecStart = pkgs.writeShellScript "qbittorrent-guest-ready" ''
                     set -eu
-                    ${passwordSetup}
                     echo "Waiting for qBittorrent WebUI..."
                     for i in $(seq 1 300); do
-                      ${
-                        if hasPassword then
-                          ''
-                            RESPONSE=$(${pkgs.curl}/bin/curl -s --connect-timeout 1 --max-time 3 \
-                              -d "username=${username}&password=$PASSWORD" \
-                              "http://127.0.0.1:${toString port}/api/v2/auth/login" 2>/dev/null || echo "")
-                            if [ "$RESPONSE" = "Ok." ]; then
-                              echo "qBittorrent WebUI ready (authenticated)"
-                              exit 0
-                            fi
-                            echo "Attempt $i/300 (response: $RESPONSE)"
-                          ''
-                        else
-                          ''
-                            HTTP_CODE=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
-                              --connect-timeout 1 --max-time 3 \
-                              "http://127.0.0.1:${toString port}/" 2>/dev/null || echo "000")
-                            if [ "$HTTP_CODE" = "200" ]; then
-                              echo "qBittorrent WebUI ready"
-                              exit 0
-                            fi
-                            echo "Attempt $i/300 (HTTP $HTTP_CODE)"
-                          ''
-                      }
+                      # LocalhostAuth=false means 127.0.0.1 bypasses auth; root returns 200.
+                      # || echo "000": curl exits non-zero when refused; set -eu would kill the loop.
+                      HTTP_CODE=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
+                        --connect-timeout 1 --max-time 3 \
+                        "http://127.0.0.1:${toString port}/" 2>/dev/null || echo "000")
+                      if [ "$HTTP_CODE" = "200" ]; then
+                        echo "qBittorrent WebUI ready"
+                        exit 0
+                      fi
+                      echo "Attempt $i/300 (HTTP $HTTP_CODE)"
                       sleep 1
                     done
                     echo "Timeout waiting for qBittorrent WebUI" >&2
                     exit 1
                   '';
                 };
+              };
+            }
+          )
+          # Guest-side password setup: compute PBKDF2 hash and write to config before qBittorrent starts.
+          # nixpkgs writes the config via tmpfiles L+ (symlink to nix store, read-only) each boot.
+          # qbittorrent-password-init runs as root after tmpfiles, replaces the symlink with a writable
+          # file containing the PBKDF2 hash derived from the sops secret in /run/secrets.
+          # /run/secrets is shared from the host into every guest via common-guest.nix.
+          (
+            { pkgs, lib, ... }:
+            let
+              secretPath = toString cfg.password._secret;
+              needsRunSecrets = lib.hasPrefix "/run/secrets" secretPath;
+              setPasswordScript = pkgs.writeText "qbt-set-password.py" ''
+                import os, hashlib, base64, re
+
+                config_file = '/var/lib/qBittorrent/qBittorrent/config/qBittorrent.conf'
+
+                with open('${secretPath}', 'rb') as f:
+                    password = f.read().rstrip(b'\n\r')
+
+                # PBKDF2 params from qBittorrent source (password.cpp):
+                # hashIterations=100000, hashMethod=EVP_sha512(), salt=16 bytes, key=64 bytes
+                salt = os.urandom(16)
+                key = hashlib.pbkdf2_hmac('sha512', password, salt, 100000, 64)
+                pbkdf2_value = '@ByteArray(' + base64.b64encode(salt).decode() + ':' + base64.b64encode(key).decode() + ')'
+
+                try:
+                    with open(config_file, 'r') as f:
+                        content = f.read()
+                except FileNotFoundError:
+                    content = ""
+
+                content = re.sub(r'WebUI\\Password_PBKDF2=[^\n]*\n?', "", content)
+
+                pbkdf2_line = 'WebUI\\Password_PBKDF2=' + pbkdf2_value + '\n'
+                if '[Preferences]' in content:
+                    # Use a lambda so the replacement is not scanned for backreferences.
+                    # re.sub treats '\P' in a plain string as an invalid escape in Python 3.12+.
+                    insert = '[Preferences]\n' + pbkdf2_line
+                    content = re.sub(r'\[Preferences\]\n', lambda m: insert, content, count=1)
+                else:
+                    content += '\n[Preferences]\n' + pbkdf2_line
+
+                # config_file may be a symlink to the read-only nix store (written by
+                # systemd-tmpfiles C+ on each boot). Unlink it so we can write a regular file.
+                if os.path.islink(config_file):
+                    os.unlink(config_file)
+
+                with open(config_file, 'w') as f:
+                    f.write(content)
+
+                print('qBittorrent password hash written to config')
+              '';
+            in
+            lib.mkIf hasPassword {
+              # Run as root (no User= set) so we can read the secret and
+              # unlink the nixpkgs-created symlink to the read-only nix store.
+              # Must run after:
+              #   - systemd-tmpfiles-setup: creates the L+ symlink we need to replace
+              #   - run-secrets.mount (only when secret is under /run/secrets):
+              #     virtiofs share providing the secret file
+              systemd.services.qbittorrent-password-init = {
+                description = "Initialize qBittorrent WebUI password (PBKDF2 hash)";
+                wantedBy = [ "multi-user.target" ];
+                before = [ "qbittorrent.service" ];
+                after = [ "systemd-tmpfiles-setup.service" ]
+                  ++ lib.optional needsRunSecrets "run-secrets.mount";
+                requires = lib.optional needsRunSecrets "run-secrets.mount";
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  ExecStart = pkgs.writeShellScript "qbt-password-init" ''
+                    set -eu
+                    ${pkgs.python3}/bin/python3 ${setPasswordScript}
+                  '';
+                };
+              };
+              systemd.services.qbittorrent = {
+                after = [ "qbittorrent-password-init.service" ];
+                requires = [ "qbittorrent-password-init.service" ];
               };
             }
           )

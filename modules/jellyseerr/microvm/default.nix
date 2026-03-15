@@ -60,7 +60,7 @@ in
 
     memoryMB = mkOption {
       type = types.int;
-      default = config.nixflix.microvm.defaults.memoryMB;
+      default = 1536;
       description = "Memory in MB for the Jellyseerr microVM";
     };
 
@@ -114,6 +114,55 @@ in
             # authUtil.nix calls `head` on the admin user list; must be non-empty in the guest.
             nixflix.jellyfin.users = mkIf config.nixflix.jellyfin.enable config.nixflix.jellyfin.users;
           }
+        ]
+        ++ optionals config.nixflix.postgres.microvm.enable [
+          (
+            let
+              postgresHost = config.nixflix.postgres.microvm.address;
+            in
+            { pkgs, ... }:
+            {
+              # Connect to postgres microVM via TCP instead of Unix socket.
+              # services.postgresql.enable is false in the guest; inject env vars directly.
+              systemd.services.jellyseerr.environment = {
+                DB_TYPE = "postgres";
+                DB_HOST = postgresHost;
+                DB_PORT = "5432";
+                DB_USER = "jellyseerr";
+                DB_NAME = "jellyseerr";
+                DB_LOG_QUERIES = "false";
+              };
+              systemd.services.jellyseerr-wait-for-db = {
+                description = "Wait for PostgreSQL microVM at ${postgresHost}";
+                wantedBy = [ "multi-user.target" ];
+                before = [ "jellyseerr.service" ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  TimeoutStartSec = "5min";
+                  ExecStart = pkgs.writeShellScript "jellyseerr-wait-for-db" ''
+                    set -eu
+                    echo "Waiting for PostgreSQL at ${postgresHost}:5432..."
+                    for i in $(seq 1 150); do
+                      if ${pkgs.postgresql}/bin/pg_isready \
+                           -h ${postgresHost} -p 5432 -t 2 > /dev/null 2>&1; then
+                        echo "PostgreSQL is ready"
+                        exit 0
+                      fi
+                      echo "Waiting... attempt $i/150"
+                      sleep 2
+                    done
+                    echo "Timeout waiting for PostgreSQL" >&2
+                    exit 1
+                  '';
+                };
+              };
+              systemd.services.jellyseerr = {
+                after = [ "jellyseerr-wait-for-db.service" ];
+                requires = [ "jellyseerr-wait-for-db.service" ];
+              };
+            }
+          )
         ];
       };
 
@@ -216,6 +265,8 @@ in
       };
 
       services.nginx.virtualHosts."${hostname}" = mkIf config.nixflix.nginx.enable {
+        enableACME = config.nixflix.nginx.acme.enable;
+        forceSSL = config.nixflix.nginx.acme.enable;
         locations."/".proxyPass = mkForce "http://${microvmCfg.address}:${toString cfg.port}";
       };
     })

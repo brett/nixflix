@@ -29,7 +29,7 @@ in
 
     memoryMB = mkOption {
       type = types.int;
-      default = 1024;
+      default = 4096;
       description = "Memory in MB for the Jellyfin microVM";
     };
 
@@ -239,6 +239,8 @@ in
       };
 
       services.nginx.virtualHosts."${hostname}" = mkIf config.nixflix.nginx.enable {
+        enableACME = config.nixflix.nginx.acme.enable;
+        forceSSL = config.nixflix.nginx.acme.enable;
         locations."/".proxyPass =
           mkForce "http://${microvmCfg.address}:${toString cfg.network.internalHttpPort}";
         locations."/socket".proxyPass =

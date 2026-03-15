@@ -111,8 +111,8 @@ All VMs receive Mullvad bypass nftables marks by default (`0x00000f41` / `0x6d6f
 them around the VPN. This follows TRaSH Guides recommendations: Starr services and Jellyfin should
 **not** run behind a VPN, even when the host has Mullvad enabled.
 
-qBittorrent is the exception — it explicitly opts out of bypass so torrent traffic always routes
-through the VPN.
+qBittorrent and SABnzbd are the exceptions — both explicitly opt out of bypass so torrent and
+usenet traffic always routes through the VPN.
 
 ### Host Systemd Units
 
