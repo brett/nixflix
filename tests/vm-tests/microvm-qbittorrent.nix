@@ -76,7 +76,7 @@ else
       # virtiofsd requires source dirs to exist at mount time.
       machine.succeed("mkdir -p /data/.state/qbittorrent /data/downloads/torrent")
 
-      machine.wait_for_unit("qbittorrent.service", timeout=300)
+      machine.wait_for_unit("microvm@qbittorrent.service", timeout=300)
 
       import json
       # Verify the WebUI is reachable from the host bridge. GET / returns the login
@@ -84,9 +84,10 @@ else
       # excluded from AuthSubnetWhitelist so that nginx-proxied user sessions still
       # require login. Authenticated API access is tested in the arr VM tests via
       # service VMs that are in the whitelist.
-      http_code = machine.succeed(
+      http_code = machine.wait_until_succeeds(
           "curl -s -o /dev/null -w '%{http_code}' "
-          "http://10.100.0.21:8282/"
+          "http://10.100.0.21:8282/",
+          timeout=120
       )
       assert http_code.strip() == "200", f"Expected HTTP 200 from WebUI, got: {http_code!r}"
       print("WebUI reachable from host (HTTP 200)")

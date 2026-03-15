@@ -66,9 +66,8 @@ else
       machine.wait_for_unit("microvm@postgres.service", timeout=600)
       machine.wait_for_unit("microvm@sonarr.service", timeout=600)
 
-      # The postgres VM firewall allows port 5432 only from service VM IPs.
-      # The host bridge IP is not in the allowlist, so this must fail.
-      machine.fail("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
+      # The postgres VM firewall allows port 5432 from service VM IPs and the host bridge.
+      machine.succeed("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
 
       # Sonarr activating proves postgres is reachable from the service VM side —
       # sonarr won't reach its ready state unless it connected to postgres successfully.

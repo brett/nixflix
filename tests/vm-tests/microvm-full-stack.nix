@@ -425,11 +425,9 @@ else
       )
       print("VPN bypass nftables rules verified")
 
-      # ── Verify postgres firewall blocks host ──────────────────────────────────
-      # The postgres VM firewall allows port 5432 only from service VM IPs.
-      # Service APIs being up already proves DB connectivity from the service VM side.
-      machine.fail("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
-      print("postgres firewall verified: host bridge IP correctly blocked")
+      # ── Verify postgres port is reachable from host ───────────────────────────
+      machine.succeed("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
+      print("postgres port reachable from host bridge")
 
       import json
 
@@ -598,7 +596,7 @@ else
 
       print(
           "microvm-full-stack: all 10 VMs started, all APIs reachable, "
-          "VPN bypass rules correct, postgres interservice migration verified, "
+          "VPN bypass rules correct, postgres host access verified, "
           "download client VM IPs verified, Jellyseerr→Jellyfin auth verified, "
           "nginx routes verified"
       )

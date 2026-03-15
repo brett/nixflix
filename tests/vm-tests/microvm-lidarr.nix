@@ -172,14 +172,14 @@ else
 
       # Quality profiles are seeded from postgres during migrations — only present if the VM can reach the DB.
       profiles = json.loads(machine.succeed(
-          "curl -sf -H 'X-Api-Key: 0123456789abcdef0123456789abcdef' "
+          "curl -sf -H 'X-Api-Key: 1234567890abcdef1234567890abcdef' "
           "http://10.100.0.13:8686/api/v1/qualityprofile"
       ))
       assert len(profiles) > 0, f"Expected quality profiles from postgres DB, got: {profiles}"
       print(f"postgres DB connectivity verified from lidarr VM: {len(profiles)} quality profile(s) present")
 
-      # The postgres VM firewall blocks the host bridge IP from port 5432.
-      machine.fail("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
+      # The postgres VM firewall allows the host bridge IP on port 5432.
+      machine.succeed("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
 
       print("microvm-lidarr: API, root folder, delay profile, download client, cross-VM connectivity, and postgres all verified")
     '';

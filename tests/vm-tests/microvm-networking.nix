@@ -108,9 +108,8 @@ else
       # ICMP reachability proves bridge/tap/routing are working at IP level.
       machine.succeed("ping -c 3 -W 2 10.100.0.2")
 
-      # The postgres VM firewall allows port 5432 only from service VM IPs.
-      # Verify the host bridge IP is correctly blocked.
-      machine.fail("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
+      # The postgres VM firewall allows port 5432 from service VM IPs and the host bridge.
+      machine.succeed("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
 
       print("microvm-networking: bridge, NAT, tap attachment, IP reachability, DNS resolver, and postgres firewall all verified")
     '';

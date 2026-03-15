@@ -26,7 +26,7 @@ else
         ];
 
         virtualisation.cores = 2;
-        virtualisation.memorySize = 1024;
+        virtualisation.memorySize = 2048;
 
         nixflix = {
           enable = true;
@@ -71,11 +71,17 @@ else
       # Rules are per-VM IP. Postgres has vpnBypass = true (explicit), so it appears.
       # Default is vpnBypass = false, matching the non-microVM mullvad-exclude opt-out model.
       assert "10.100.0.2" in result, "Postgres VM IP not found in bypass rules (vpnBypass = true)"
-      assert "10.100.0.0/24" not in result, "Subnet-wide bypass rule found — must be per-VM IP"
 
-      # qBittorrent has vpnBypass = false (routes through VPN); must not appear in bypass rules.
-      assert "10.100.0.21" not in result, (
-          "qBittorrent IP 10.100.0.21 found in bypass rules — should be excluded (vpnBypass=false)"
+      # The prerouting chain uses per-VM IPs; the output chain uses the subnet so that
+      # host-originated traffic (nginx, etc.) can reach microVM services through Mullvad.
+      prerouting = result.split("chain prerouting")[1].split("}")[0] if "chain prerouting" in result else ""
+      assert "10.100.0.0/24" not in prerouting, (
+          "Subnet-wide bypass rule found in prerouting — must be per-VM IP"
+      )
+
+      # qBittorrent has vpnBypass = false (routes through VPN); must not appear in prerouting.
+      assert "10.100.0.21" not in prerouting, (
+          "qBittorrent IP 10.100.0.21 found in prerouting bypass rules — should be excluded (vpnBypass=false)"
       )
 
       print("microvm-vpn-bypass: per-VM Mullvad bypass marks correctly configured")

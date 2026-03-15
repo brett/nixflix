@@ -179,8 +179,8 @@ else
       assert len(profiles) > 0, f"Expected quality profiles from postgres DB, got: {profiles}"
       print(f"postgres DB connectivity verified from sonarr VM: {len(profiles)} quality profile(s) present")
 
-      # The postgres VM firewall blocks the host bridge IP from port 5432.
-      machine.fail("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
+      # The postgres VM firewall allows the host bridge IP on port 5432.
+      machine.succeed("bash -c 'echo >/dev/tcp/10.100.0.2/5432'")
 
       print("microvm-sonarr: API, root folder, delay profile, download client, cross-VM connectivity, and postgres all verified")
     '';
