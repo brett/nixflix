@@ -6,6 +6,7 @@
 with lib;
 let
   mkSecureCurl = import ../../lib/mk-secure-curl.nix { inherit lib pkgs; };
+  mkWaitForApiScript = import ./mkWaitForApiScript.nix { inherit lib pkgs; };
   capitalizedName =
     lib.toUpper (builtins.substring 0 1 serviceName) + builtins.substring 1 (-1) serviceName;
 
@@ -114,15 +115,19 @@ in
     '';
   };
 
-  mkService = serviceConfig: {
+  mkService = serviceConfig:
+  let
+    hasConfigService = serviceConfig.apiKey != null && serviceConfig.hostConfig.password != null;
+  in {
     description = "Configure ${serviceName} delay profiles via API";
-    after = [ "${serviceName}-config.service" ];
-    requires = [ "${serviceName}-config.service" ];
+    after = [ "${serviceName}.service" ] ++ optionals hasConfigService [ "${serviceName}-config.service" ];
+    requires = optionals hasConfigService [ "${serviceName}-config.service" ];
     wantedBy = [ "multi-user.target" ];
 
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
+      ExecStartPre = mkWaitForApiScript serviceName serviceConfig;
     };
 
     script =

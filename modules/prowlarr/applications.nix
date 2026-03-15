@@ -56,15 +56,18 @@ in
       {
         description = "Configure Prowlarr applications via API";
         after = [
-          "prowlarr-config.service"
+          "prowlarr.service"
         ]
+        # prowlarr-config.service only exists when hostConfig.password is set
+        ++ lib.optional (cfg.config.hostConfig.password != null) "prowlarr-config.service"
         ++ lib.optional config.nixflix.radarr.enable "radarr-config.service"
         ++ lib.optional config.nixflix.sonarr.enable "sonarr-config.service"
         ++ lib.optional config.nixflix.sonarr-anime.enable "sonarr-anime-config.service"
         ++ lib.optional config.nixflix.lidarr.enable "lidarr-config.service";
         requires = [
-          "prowlarr-config.service"
+          "prowlarr.service"
         ]
+        ++ lib.optional (cfg.config.hostConfig.password != null) "prowlarr-config.service"
         ++ lib.optional config.nixflix.radarr.enable "radarr-config.service"
         ++ lib.optional config.nixflix.sonarr.enable "sonarr-config.service"
         ++ lib.optional config.nixflix.sonarr-anime.enable "sonarr-anime-config.service"
