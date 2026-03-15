@@ -32,6 +32,7 @@ in
     };
 
     accountNumber = secrets.mkSecretOption {
+      nullable = true;
       default = null;
       description = "Mullvad account number.";
     };
@@ -132,6 +133,24 @@ in
   config = mkIf cfg.enable {
     services.resolved.enable = true;
 
+    # When switch-to-configuration reloads nftables it atomically flushes all
+    # tables — including Mullvad's dynamically-managed ones.  Mullvad's daemon
+    # detects the disruption, re-adds its nftables rules, but clears its ip
+    # rules (policy routing) without restoring them.  The firewall then blocks
+    # DNS while the VPN routing no longer exists to satisfy it.
+    #
+    # Fix: restart mullvad-daemon after every nftables reload so it
+    # re-establishes routing cleanly.  The After= ensures the restart happens
+    # *after* nftables has finished reloading, not before.
+    systemd.services.mullvad-daemon = {
+      after = [ "nftables.service" ];
+      restartTriggers = mkIf config.networking.nftables.enable [
+        # Any change to the NixOS-managed nftables ruleset (new VM IPs, new
+        # tables, etc.) causes nftables to reload and mullvad-daemon to restart.
+        config.networking.nftables.tables
+      ];
+    };
+
     services.mullvad-vpn = {
       enable = true;
       enableExcludeWrapper = true;
@@ -165,7 +184,16 @@ in
           ${optionalString (cfg.accountNumber != null) ''
             if ${mullvadPkg}/bin/mullvad account get | grep -q "Not logged in"; then
               echo "Logging in to Mullvad account..."
-              echo "${secrets.toShellValue cfg.accountNumber}" | ${mullvadPkg}/bin/mullvad account login
+              # Retry login — on first boot the Mullvad API may be temporarily
+              # unreachable while network routing stabilises.
+              for i in {1..10}; do
+                if echo "${secrets.toShellValue cfg.accountNumber}" | ${mullvadPkg}/bin/mullvad account login 2>/dev/null; then
+                  echo "Mullvad login succeeded"
+                  break
+                fi
+                echo "Login attempt $i/10 failed, retrying in 5s..."
+                sleep 5
+              done
 
               echo "Waiting for relay list to download..."
               for i in {1..30}; do
