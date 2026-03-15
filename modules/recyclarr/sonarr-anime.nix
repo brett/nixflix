@@ -46,7 +46,7 @@
       }
 
       {
-        trash_ids = [ "026d5aadd1a6b4e550b134cb6c72b3ca" ]; # 10bit
+        trash_ids = [ "b2550eb333d27b75833e25b8c2557b38" ]; # 10bit
         assign_scores_to = [
           {
             name = "Remux-1080p - Anime";
@@ -56,7 +56,7 @@
       }
 
       {
-        trash_ids = [ "026d5aadd1a6b4e550b134cb6c72b3ca" ]; # Anime Dual Audio
+        trash_ids = [ "418f50b10f1907201b6cfdf881f467b7" ]; # Anime Dual Audio
         assign_scores_to = [
           {
             name = "Remux-1080p - Anime";

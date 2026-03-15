@@ -16,9 +16,10 @@ in
     delete_old_custom_formats = lib.mkDefault true;
     replace_existing_custom_formats = lib.mkDefault true;
 
-    quality_definition = {
-      type = lib.mkDefault "movie";
-    };
+    # quality_definition omitted: the radarr-quality-definition-sqp-streaming
+    # include template provides the quality definition. Setting type = "movie"
+    # here would apply the standard movie sizes on top of the SQP sizes.
+    quality_definition = lib.mkDefault null;
 
     media_naming = {
       folder = lib.mkDefault "default";

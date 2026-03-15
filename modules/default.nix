@@ -100,6 +100,14 @@ in
           Enable if you don't have a separate DNS setup.
         '';
       };
+
+      acme = {
+        enable = mkOption {
+          type = types.bool;
+          default = false;
+          description = "Whether to enable ACME/Let's Encrypt TLS certificates for nginx virtual hosts.";
+        };
+      };
     };
 
     mediaUsers = mkOption {

@@ -197,6 +197,8 @@ in
     };
 
     services.nginx.virtualHosts."${hostname}" = mkIf config.nixflix.nginx.enable {
+      enableACME = config.nixflix.nginx.acme.enable;
+      forceSSL = config.nixflix.nginx.acme.enable;
       locations."/" = {
         proxyPass = "http://127.0.0.1:${toString service.webuiPort}";
         recommendedProxySettings = true;
