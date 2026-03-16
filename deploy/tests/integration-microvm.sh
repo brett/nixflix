@@ -381,7 +381,14 @@ mullvad_status=$(ssh_run mullvad status 2>/dev/null || true)
 if echo "$mullvad_status" | grep -qi "connected"; then
   pass "Mullvad: connected"
 else
-  fail "Mullvad: not connected (status: ${mullvad_status:-unavailable})"
+  # Check if login failed due to too many devices — common after a fresh deploy
+  # where a prior install left an orphaned device on the account.
+  if ssh_run journalctl -u mullvad-config.service -b --no-pager -q 2>/dev/null \
+       | grep -q "too many devices"; then
+    fail "Mullvad: not connected — too many devices on account (revoke one at mullvad.net/account/devices, then: systemctl restart mullvad-config.service)"
+  else
+    fail "Mullvad: not connected (status: ${mullvad_status:-unavailable})"
+  fi
 fi
 
 lockdown=$(ssh_run mullvad lockdown-mode get 2>/dev/null || true)

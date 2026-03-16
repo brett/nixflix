@@ -147,7 +147,18 @@ done
 # Mullvad connection
 mullvad_line=$(mullvad status 2>/dev/null | head -1 || echo "unknown")
 echo ""
-echo -e "  Mullvad: $mullvad_line"
+if echo "$mullvad_line" | grep -qi "connected"; then
+  echo -e "  Mullvad: ${GREEN}${mullvad_line}${NC}"
+else
+  echo -e "  Mullvad: ${RED}${mullvad_line}${NC}"
+  # Check if login failed due to too many devices
+  if journalctl -u mullvad-config.service -b --no-pager -q 2>/dev/null \
+       | grep -q "too many devices"; then
+    echo -e "  ${YELLOW}⚠  Mullvad login failed: too many devices on account.${NC}"
+    echo -e "  ${YELLOW}   Revoke a device at https://mullvad.net/account/devices${NC}"
+    echo -e "  ${YELLOW}   then: systemctl restart mullvad-config.service${NC}"
+  fi
+fi
 
 # Any globally failed units (non-microvm)
 failed_global=$(systemctl list-units --state=failed --no-legend 2>/dev/null \
