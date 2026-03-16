@@ -147,7 +147,7 @@ in
       restartTriggers = mkIf config.networking.nftables.enable [
         # Any change to the NixOS-managed nftables ruleset (new VM IPs, new
         # tables, etc.) causes nftables to reload and mullvad-daemon to restart.
-        config.networking.nftables.tables
+        (builtins.toJSON config.networking.nftables.tables)
       ];
     };
 
@@ -187,7 +187,7 @@ in
               # Retry login — on first boot the Mullvad API may be temporarily
               # unreachable while network routing stabilises.
               for i in {1..10}; do
-                if echo "${secrets.toShellValue cfg.accountNumber}" | ${mullvadPkg}/bin/mullvad account login 2>/dev/null; then
+                if echo "${secrets.toShellValue cfg.accountNumber}" | ${mullvadPkg}/bin/mullvad account login; then
                   echo "Mullvad login succeeded"
                   break
                 fi
