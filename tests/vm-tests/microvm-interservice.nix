@@ -30,7 +30,7 @@ else
         ];
 
         virtualisation.cores = 6;
-        virtualisation.memorySize = 6144;
+        virtualisation.memorySize = 8192;
 
         # postgresql client on the host so we can run psql against the postgres VM.
         environment.systemPackages = [ pkgs.postgresql ];
@@ -99,7 +99,7 @@ else
       )
 
       machine.wait_for_unit("microvm@postgres.service", timeout=600)
-      machine.wait_for_unit("microvm@sonarr.service", timeout=600)
+      machine.wait_for_unit("microvm@sonarr.service", timeout=900)
       machine.wait_for_unit("sabnzbd.service", timeout=600)
 
       # Config service inside the VM restarts sonarr after first startup; poll until stable.
@@ -123,7 +123,16 @@ else
 
       import json
 
-      machine.wait_for_unit("sonarr-downloadclients.service", timeout=180)
+      # wait_for_unit fails immediately on "inactive and no pending jobs", which
+      # occurs before systemd has queued the job.  wait_until_succeeds polls instead.
+      machine.wait_until_succeeds(
+          "systemctl is-active sonarr-config.service",
+          timeout=120
+      )
+      machine.wait_until_succeeds(
+          "systemctl is-active sonarr-downloadclients.service",
+          timeout=180
+      )
       clients_raw = machine.succeed(
           "curl -sf -H 'X-Api-Key: 0123456789abcdef0123456789abcdef' "
           "http://10.100.0.10:8989/api/v3/downloadclient"

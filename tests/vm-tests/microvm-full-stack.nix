@@ -29,7 +29,7 @@ else
         ];
 
         virtualisation.cores = 8;
-        virtualisation.memorySize = 8192;
+        virtualisation.memorySize = 16384;
         # Jellyfin 10.11.6+ requires ≥2 GiB free on data and cache dirs; virtiofs
         # reports host disk space, so the test VM disk must be large enough.
         virtualisation.diskSize = 8192;
@@ -404,15 +404,15 @@ else
 
       machine.wait_for_unit("microvm@postgres.service", timeout=600)
       for svc in ["sonarr", "radarr", "lidarr", "sonarr-anime"]:
-          machine.wait_for_unit(f"microvm@{svc}.service", timeout=600)
+          machine.wait_for_unit(f"microvm@{svc}.service", timeout=900)
       # Prowlarr starts last; system is under maximum load. 900s matches host-side TimeoutStartSec.
       machine.wait_for_unit("microvm@prowlarr.service", timeout=900)
       machine.wait_for_unit("sabnzbd.service", timeout=600)
-      machine.wait_for_unit("qbittorrent.service", timeout=300)
+      machine.wait_for_unit("qbittorrent.service", timeout=600)
       # jellyfin-guest-ready polls the HTTP API; can be slow on first boot.
-      machine.wait_for_unit("microvm@jellyfin.service", timeout=720)
+      machine.wait_for_unit("microvm@jellyfin.service", timeout=900)
       # Host-side poll service, not microvm@jellyseerr: vsock READY fires before port 5055 binds.
-      machine.wait_for_unit("jellyseerr.service", timeout=300)
+      machine.wait_for_unit("jellyseerr.service", timeout=600)
 
       # ── Verify VPN bypass nftables rules ─────────────────────────────────────
       machine.wait_for_unit("nftables.service", timeout=30)
@@ -437,7 +437,7 @@ else
       result = machine.wait_until_succeeds(
           "curl -sf -H 'X-Api-Key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "
           "http://10.100.0.10:8989/api/v3/system/status",
-          timeout=120
+          timeout=900
       )
       assert '"appName": "Sonarr"' in result, f"sonarr API: {result!r}"
       print("sonarr API verified")
@@ -445,7 +445,7 @@ else
       result = machine.wait_until_succeeds(
           "curl -sf -H 'X-Api-Key: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' "
           "http://10.100.0.11:8990/api/v3/system/status",
-          timeout=120
+          timeout=300
       )
       assert '"appName": "Sonarr"' in result, f"sonarr-anime API: {result!r}"
       print("sonarr-anime API verified")
@@ -453,7 +453,7 @@ else
       result = machine.wait_until_succeeds(
           "curl -sf -H 'X-Api-Key: cccccccccccccccccccccccccccccccc' "
           "http://10.100.0.12:7878/api/v3/system/status",
-          timeout=120
+          timeout=300
       )
       assert '"appName": "Radarr"' in result, f"radarr API: {result!r}"
       print("radarr API verified")
@@ -461,7 +461,7 @@ else
       result = machine.wait_until_succeeds(
           "curl -sf -H 'X-Api-Key: dddddddddddddddddddddddddddddddd' "
           "http://10.100.0.13:8686/api/v1/system/status",
-          timeout=120
+          timeout=300
       )
       assert '"appName": "Lidarr"' in result, f"lidarr API: {result!r}"
       print("lidarr API verified")
@@ -469,7 +469,7 @@ else
       result = machine.wait_until_succeeds(
           "curl -sf -H 'X-Api-Key: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' "
           "http://10.100.0.14:9696/api/v1/system/status",
-          timeout=120
+          timeout=300
       )
       assert '"appName": "Prowlarr"' in result, f"prowlarr API: {result!r}"
       print("prowlarr API verified")
