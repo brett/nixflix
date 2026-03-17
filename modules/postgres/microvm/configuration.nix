@@ -14,6 +14,25 @@
   # Listen on all interfaces (not just unix socket)
   services.postgresql.settings.listen_addresses = lib.mkForce "*";
 
+  # arr data is rebuildable; these settings trade durability for migration speed.
+  services.postgresql.settings = {
+    # Biggest single win for write-heavy migrations.
+    synchronous_commit = "off";
+
+    # Eliminates virtiofsd round-trips on every transaction.
+    fsync = false;
+    full_page_writes = false;
+
+    shared_buffers = "512MB";
+
+    # No replication in this setup.
+    wal_level = "minimal";
+    max_wal_senders = 0;
+
+    checkpoint_completion_target = 0.9;
+    max_wal_size = "1GB";
+  };
+
   # Pre-create databases and users for all potential arr services.
   # The subnet trust rule is pushed via extraModules (uses configured subnet).
   services.postgresql.ensureDatabases = [

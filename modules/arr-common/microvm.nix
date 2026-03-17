@@ -86,15 +86,81 @@ in
               };
             };
           }
+          # Without this, the arr service races the virtiofs mount and can create
+          # config.xml in the guest-local overlay before the host share is visible.
+          ({ config, ... }: {
+            systemd.services."${serviceName}".unitConfig.RequiresMountsFor =
+              "${config.nixflix.stateDir}/${serviceName}";
+          })
           # Clear ExecStartPost: remote postgres migrations can take many minutes,
           # triggering Restart=on-failure before the service is ready.
           (_: {
             systemd.services."${serviceName}".serviceConfig.ExecStartPost = mkForce [ ];
           })
-          # rootfolders/delayprofiles must wait until the API is fully stable after
-          # postgres migration (which can take several minutes). sonarr-guest-ready
-          # already polls with a 10-minute timeout, so ordering after it guarantees
-          # the API is ready before rootfolders/delayprofiles attempt their API calls.
+          # Sonarr's PUT /api/.../config/host returns 4xx (schema mismatch), causing
+          # `set -eu` + `curl -f` to exit before the restart.  sed on config.xml instead.
+          (
+            let
+              inherit (cfg.config.hostConfig) port;
+              inherit (cfg.config) apiVersion;
+              apiKeySetup = optionalString (cfg.config.apiKey != null)
+                "API_KEY=${secrets.toShellValue cfg.config.apiKey}";
+              apiKeyArg = optionalString (cfg.config.apiKey != null)
+                "-H \"X-Api-Key: $API_KEY\"";
+              acceptCondition =
+                if cfg.config.apiKey != null then
+                  ''[ "$HTTP_CODE" = "200" ]''
+                else
+                  ''[ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]'';
+            in
+            { config, pkgs, ... }:
+            {
+              systemd.services."${serviceName}-config" = mkForce {
+                description = "Configure ${capitalizedName} bind address in microVM (pre-READY=1)";
+                after = [ "${serviceName}.service" ];
+                before = [ "${serviceName}-guest-ready.service" ];
+                wantedBy = [ "multi-user.target" ];
+                serviceConfig = {
+                  Type = "oneshot";
+                  RemainAfterExit = true;
+                  TimeoutStartSec = "20min";
+                };
+                script = ''
+                  set -eu
+                  ${apiKeySetup}
+                  CONF="${config.nixflix.stateDir}/${serviceName}/config.xml"
+                  echo "Waiting for ${capitalizedName} API (up to 20min)..."
+                  for i in $(seq 1 1200); do
+                    HTTP_CODE=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
+                      --connect-timeout 1 --max-time 3 \
+                      ${apiKeyArg} \
+                      "http://127.0.0.1:${toString port}/api/${apiVersion}/system/status" \
+                      2>/dev/null || true)
+                    if ${acceptCondition}; then
+                      echo "${capitalizedName} API is ready"
+                      break
+                    fi
+                    if [ "$i" = "1200" ]; then
+                      echo "${capitalizedName} API not available after 20 minutes" >&2
+                      exit 1
+                    fi
+                    sleep 1
+                  done
+                  echo "Writing BindAddress=* to $CONF..."
+                  if [ -f "$CONF" ] && grep -q '<BindAddress>' "$CONF"; then
+                    ${pkgs.gnused}/bin/sed -i \
+                      's|<BindAddress>.*</BindAddress>|<BindAddress>*</BindAddress>|' \
+                      "$CONF"
+                  fi
+                  echo "Restarting ${capitalizedName}..."
+                  systemctl restart ${serviceName}.service
+                  echo "${capitalizedName} restarted"
+                '';
+              };
+            }
+          )
+          # After guest-ready (not just the service) — the API isn't stable until
+          # sonarr-config has run the sed fix and restarted sonarr.
           (_: {
             systemd.services."${serviceName}-rootfolders".after =
               [ "${serviceName}-guest-ready.service" ];
@@ -210,8 +276,12 @@ in
                 description = "Wait for ${capitalizedName} HTTP API to be ready (guest-side readiness gate)";
                 wantedBy = [ "multi-user.target" ];
                 before = [ "multi-user.target" ];
-                # No After=: adding After=<service> risks letting multi-user.target
-                # start before this gate if that service is slow to activate.
+                # After sonarr-config so READY=1 fires only after sed writes BindAddress=*
+                # and sonarr restarts.  After= on a non-existent unit is ignored by systemd.
+                after = [
+                  "${serviceName}.service"
+                  "${serviceName}-config.service"
+                ];
                 serviceConfig = {
                   Type = "oneshot";
                   RemainAfterExit = true;
@@ -225,7 +295,7 @@ in
                         --connect-timeout 1 --max-time 3 \
                         ${apiKeyArg} \
                         "http://127.0.0.1:${toString port}/api/${apiVersion}/system/status" \
-                        2>/dev/null || echo "000")
+                        2>/dev/null || true)
                       if ${acceptCondition}; then
                         echo "${capitalizedName} API ready"
                         exit 0
@@ -245,14 +315,59 @@ in
 
       nixflix.globals.serviceAddresses.${serviceName} = microvmCfg.address;
 
-      systemd.services."microvm@${serviceName}" = mkIf (microvmCfg.startAfter != [ ]) {
-        after = microvmCfg.startAfter;
-        wants = microvmCfg.startAfter;
+      # APPNAME__SERVER__BINDADDRESS is not reliably honoured on first boot;
+      # seeding config.xml before the microVM starts is the only reliable approach.
+      systemd.services."${serviceName}-init-config-xml" = {
+        description = "Seed ${capitalizedName} config.xml with BindAddress=* (microVM first-boot)";
+        before = [ "microvm@${serviceName}.service" ];
+        wantedBy = [ "microvm@${serviceName}.service" ];
+        unitConfig.ConditionPathExists = "!${config.nixflix.stateDir}/${serviceName}/config.xml";
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          User = cfg.user;
+          Group = cfg.group;
+          UMask = "0077";
+          ExecStart = pkgs.writeShellScript "${serviceName}-init-config-xml" ''
+            set -eu
+            printf '<?xml version="1.0" encoding="utf-8"?>\n<Config>\n  <BindAddress>*</BindAddress>\n</Config>\n' \
+              > "${config.nixflix.stateDir}/${serviceName}/config.xml"
+          '';
+        };
       };
+
+      systemd.services."microvm@${serviceName}" = mkMerge [
+        (mkIf (microvmCfg.startAfter != [ ]) {
+          after = microvmCfg.startAfter;
+          wants = microvmCfg.startAfter;
+        })
+        # DB migrations under concurrent virtiofsd IO can exceed the systemd default.
+        { serviceConfig.TimeoutStartSec = mkForce "900"; }
+      ];
 
       # microvm@{name}.service is Type=notify; it becomes active only after the
       # guest's {service}-guest-ready completes and fires vsock READY=1.
       systemd.services = {
+        # Without these stubs, both services try to connect to /run/postgresql
+        # (no local socket in microVM mode) and block postgresql-ready.target.
+        "${serviceName}-setup-logs-db" = mkForce {
+          description = "${capitalizedName} setup-logs-db (disabled in microVM mode)";
+          wantedBy = [ ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.coreutils}/bin/true";
+          };
+        };
+
+        "${serviceName}-wait-for-db" = mkForce {
+          description = "${capitalizedName} wait-for-db (disabled in microVM mode)";
+          wantedBy = [ ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.coreutils}/bin/true";
+          };
+        };
+
         "${serviceName}" = mkForce {
           description = "${capitalizedName} (running in microVM at ${microvmCfg.address})";
           after = [ "microvm@${serviceName}.service" ];
@@ -274,17 +389,54 @@ in
           };
         };
 
-        "${serviceName}-config" = mkForce {
-          description = "${capitalizedName} config (delegating to microVM)";
-          after = [ "microvm@${serviceName}.service" ];
-          requires = [ "microvm@${serviceName}.service" ];
-          wantedBy = [ "multi-user.target" ];
-          serviceConfig = {
-            Type = "oneshot";
-            RemainAfterExit = true;
-            ExecStart = "${pkgs.coreutils}/bin/true";
-          };
-        };
+        "${serviceName}-config" = mkForce (
+          let
+            port = toString cfg.config.hostConfig.port;
+            apiVersion = cfg.config.apiVersion;
+            addr = microvmCfg.address;
+            apiKeySetup = optionalString (cfg.config.apiKey != null)
+              "API_KEY=${secrets.toShellValue cfg.config.apiKey}";
+            apiKeyArg = optionalString (cfg.config.apiKey != null)
+              "-H \"X-Api-Key: $API_KEY\"";
+            acceptCondition =
+              if cfg.config.apiKey != null then
+                ''[ "$HTTP_CODE" = "200" ]''
+              else
+                ''[ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]'';
+          in
+          {
+            description = "${capitalizedName} config (polling microVM API for stability)";
+            # after= not requires= so a crash-before-READY=1 doesn't propagate
+            # as failure here and cascade to sonarr-downloadclients.
+            after = [ "microvm@${serviceName}.service" ];
+            wantedBy = [ "multi-user.target" ];
+            serviceConfig = {
+              Type = "oneshot";
+              RemainAfterExit = true;
+              TimeoutStartSec = "660";
+              ExecStart = pkgs.writeShellScript "${serviceName}-host-config-wait" ''
+                set -eu
+                ${apiKeySetup}
+                echo "Waiting for ${capitalizedName} API to stabilize at ${addr}..."
+                for i in $(seq 1 600); do
+                  HTTP_CODE=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
+                    --connect-timeout 2 --max-time 5 \
+                    ${apiKeyArg} \
+                    "http://${addr}:${port}/api/${apiVersion}/system/status" \
+                    2>/dev/null || true)
+                  if ${acceptCondition}; then
+                    echo "${capitalizedName} API stable at ${addr}"
+                    exit 0
+                  fi
+                  echo "Attempt $i/600 (HTTP $HTTP_CODE)"
+                  sleep 1
+                done
+                echo "Timeout waiting for ${capitalizedName} API" >&2
+                exit 1
+              '';
+            };
+          }
+        );
 
         "${serviceName}-rootfolders" = mkForce {
           description = "${capitalizedName} rootfolders (delegating to microVM)";

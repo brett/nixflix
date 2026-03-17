@@ -37,7 +37,7 @@ in
 
     vcpus = mkOption {
       type = types.int;
-      default = config.nixflix.microvm.defaults.vcpus;
+      default = 2;
       description = "Number of vCPUs for the PostgreSQL microVM";
     };
 

@@ -107,12 +107,16 @@ in
               '';
           }
           {
-            nixflix.jellyseerr.jellyfin.hostname = mkIf config.nixflix.jellyfin.microvm.enable config.nixflix.jellyfin.microvm.address;
+            nixflix.jellyseerr.jellyfin = {
+              hostname = mkIf config.nixflix.jellyfin.microvm.enable config.nixflix.jellyfin.microvm.address;
+              # jellyfin.enable is false in the jellyseerr guest so these can't
+              # be auto-derived; forward the host-resolved values directly.
+              adminUsername = mkForce cfg.jellyfin.adminUsername;
+              adminPassword = mkForce cfg.jellyfin.adminPassword;
+            };
             nixflix.jellyseerr.apiKey = mkForce cfg.apiKey;
             nixflix.jellyseerr.radarr = mkForce guestRadarr;
             nixflix.jellyseerr.sonarr = mkForce guestSonarr;
-            # authUtil.nix calls `head` on the admin user list; must be non-empty in the guest.
-            nixflix.jellyfin.users = mkIf config.nixflix.jellyfin.enable config.nixflix.jellyfin.users;
           }
         ]
         ++ optionals config.nixflix.postgres.microvm.enable [
