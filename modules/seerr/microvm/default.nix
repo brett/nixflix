@@ -172,12 +172,25 @@ in
 
       nixflix.globals.serviceAddresses.seerr = microvmCfg.address;
 
-      systemd.services."microvm@seerr" = mkIf (microvmCfg.startAfter != [ ]) {
-        after = microvmCfg.startAfter;
-        wants = microvmCfg.startAfter;
+      systemd.services."microvm@seerr" = {
+        # Delay until Jellyfin is up so the in-guest seerr-setup can
+        # authenticate with Jellyfin on first boot without a race condition.
+        after = [ "jellyfin.service" ] ++ microvmCfg.startAfter;
+        wants = [ "jellyfin.service" ] ++ microvmCfg.startAfter;
       };
 
       systemd.services = {
+        # seerr-wait-for-db connects via Unix socket, which doesn't exist
+        # in microVM mode.  Replace with a no-op; the in-guest variant handles
+        # the real TCP wait against the postgres microVM.
+        seerr-wait-for-db = mkForce {
+          description = "Seerr wait-for-db (disabled in microVM mode)";
+          wantedBy = [ ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.coreutils}/bin/true";
+          };
+        };
         seerr = mkForce {
           description = "Wait for Seerr HTTP API to be ready (host-side poll)";
           after = [ "microvm@seerr.service" ];
