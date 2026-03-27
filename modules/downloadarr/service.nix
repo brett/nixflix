@@ -63,19 +63,20 @@ let
 
       clients = map (transformClient serviceName) allClients;
       serviceAddress = config.nixflix.globals.serviceAddresses.${serviceName} or "127.0.0.1";
+      hasConfigService = serviceConfig.apiKey != null && serviceConfig.hostConfig.password != null;
     in
     {
       "${serviceName}-downloadclients" = {
         description = "Configure ${serviceName} download clients via API";
         after = [
           "${serviceName}.service"
-          "${serviceName}-config.service"
         ]
+        ++ lib.optionals hasConfigService [ "${serviceName}-config.service" ]
         ++ clientDependencies;
         requires = [
           "${serviceName}.service"
-          "${serviceName}-config.service"
         ]
+        ++ lib.optionals hasConfigService [ "${serviceName}-config.service" ]
         ++ clientDependencies;
         wantedBy = [ "multi-user.target" ];
 
@@ -84,7 +85,7 @@ let
           RemainAfterExit = true;
           ExecStartPre =
             "${pkgs.curl}/bin/curl --retry 30 --retry-delay 2 --retry-connrefused -so /dev/null"
-            + " http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}/system/status";
+            + " http://${serviceAddress}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}/system/status";
         };
 
         script = ''
@@ -208,10 +209,8 @@ let
                         "Content-Type" = "application/json";
                       };
                       data = "$UPDATED_CLIENT";
-                      # --retry-connrefused/--retry-all-errors: arr service may restart
-                      # between GET and PUT (config service inside VM); covers both
-                      # ECONNREFUSED and transient 4xx on that window.
-                      extraArgs = "-Sf --retry-connrefused --retry-all-errors";
+                      # shell loop handles retries; timeouts bound each attempt
+                      extraArgs = "-Sf --connect-timeout 5 --max-time 30";
                     }
                   } >/dev/null; then
                     break
@@ -246,10 +245,8 @@ let
                         "Content-Type" = "application/json";
                       };
                       data = "$NEW_CLIENT";
-                      # --retry-connrefused/--retry-all-errors: arr service may restart
-                      # between GET and POST (config service inside VM); ECONNREFUSED
-                      # means server never saw the request, so retrying the POST is safe.
-                      extraArgs = "-Sf --retry-connrefused --retry-all-errors";
+                      # shell loop handles retries; timeouts bound each attempt
+                      extraArgs = "-Sf --connect-timeout 5 --max-time 30";
                     }
                   } >/dev/null; then
                     break
