@@ -34,8 +34,8 @@ else
         # reports host disk space, so the test VM disk must be large enough.
         virtualisation.diskSize = 8192;
 
-        # SLIRP networking requires DHCP for reliable DNS (recyclarr fetches TRaSH Guides).
-        networking.useDHCP = true;
+        # recyclarr is disabled; no need for SLIRP DNS.
+        networking.useDHCP = false;
 
         environment.systemPackages = [ pkgs.postgresql ];
 

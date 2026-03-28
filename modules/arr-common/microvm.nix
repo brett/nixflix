@@ -341,6 +341,13 @@ in
           after = microvmCfg.startAfter;
           wants = microvmCfg.startAfter;
         })
+        # When postgres runs in a microVM, wait for it to be guest-ready before
+        # starting this VM. The host's postgresql-ready.target is reached immediately
+        # in microVM mode (local postgres is disabled), so it provides no ordering.
+        (mkIf config.nixflix.postgres.microvm.enable {
+          after = [ "microvm@postgres.service" ];
+          wants = [ "microvm@postgres.service" ];
+        })
         # DB migrations under concurrent virtiofsd IO can exceed the systemd default.
         { serviceConfig.TimeoutStartSec = mkForce "900"; }
       ];
