@@ -61,4 +61,6 @@
   nixflix.seerr.enable = true;
   nixflix.seerr.microvm.enable = true;
   nixflix.seerr.microvm.memoryMB = 1536;
+  nixflix.seerr.jellyfin.adminUsername = "admin";
+  nixflix.seerr.jellyfin.adminPassword._secret = config.sops.secrets.arr_admin_password.path;
 }
