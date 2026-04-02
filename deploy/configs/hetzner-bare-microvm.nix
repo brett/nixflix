@@ -10,6 +10,8 @@
 {
   imports = [ ./hetzner-bare.nix ];
 
+  nixpkgs.config.allowUnfree = true;
+
   sops.secrets = {
     qbittorrent_password = {
       sopsFile = ../secrets/admin.yaml;
