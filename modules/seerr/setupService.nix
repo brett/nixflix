@@ -109,6 +109,7 @@ in
         # Step 2: Fetch and enable libraries BEFORE sync
         echo "Fetching library list from Jellyfin..."
         LIBRARIES_RESPONSE=$(${pkgs.curl}/bin/curl -sf \
+          --connect-timeout 5 --max-time 120 \
           -b "${authUtil.cookieFile}" \
           "$BASE_URL/api/v1/settings/jellyfin/library?sync=true")
 
