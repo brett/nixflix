@@ -145,9 +145,8 @@ in
     # src_valid_mark required so reply packets from bypass ports pass the source-address check.
     boot.kernel.sysctl."net.ipv4.conf.all.src_valid_mark" = mkIf (cfg.bypassPorts != [ ]) 1;
 
-    networking.nftables = mkIf (cfg.bypassPorts != [ ]) {
-      enable = true;
-      tables."mullvad-bypass" = {
+    networking.nftables.enable = mkIf (cfg.bypassPorts != [ ]) true;
+    networking.nftables.tables."mullvad-bypass" = mkIf (cfg.bypassPorts != [ ]) {
         family = "inet";
         content = ''
           chain input {
@@ -177,7 +176,6 @@ in
             meta mark 0x00080000 ct mark set 0x00000f41 meta mark set 0x6d6f6c65
           }
         '';
-      };
     };
 
     services.resolved.enable = true;
