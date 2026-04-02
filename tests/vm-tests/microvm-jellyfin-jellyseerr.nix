@@ -9,8 +9,8 @@
   microvmModules ? null,
 }:
 if microvmModules == null then
-  pkgs.runCommand "microvm-jellyfin-jellyseerr-skip" { } ''
-    echo "microvm-jellyfin-jellyseerr: skipped (pass microvmModules to run)" > $out
+  pkgs.runCommand "microvm-jellyfin-seerr-skip" { } ''
+    echo "microvm-jellyfin-seerr: skipped (pass microvmModules to run)" > $out
   ''
 else
   let
@@ -18,7 +18,7 @@ else
     verifyJellyfin = import ../lib/jellyfin-verify.nix;
   in
   base.pkgsUnfree.testers.runNixOSTest {
-    name = "microvm-jellyfin-jellyseerr-test";
+    name = "microvm-jellyfin-seerr-test";
 
     nodes.machine =
       { pkgs, ... }:
@@ -45,6 +45,9 @@ else
 
           jellyfin = {
             enable = true;
+            apiKey = {
+              _secret = pkgs.writeText "jellyfin-apikey" "jellyfinApiKey1111111111111111111";
+            };
             microvm.enable = true;
             microvm.vcpus = 4;
             microvm.memoryMB = 2048;
@@ -400,7 +403,7 @@ else
             };
           };
 
-          jellyseerr = {
+          seerr = {
             enable = true;
             microvm.enable = true;
             microvm.startAfter = [ "microvm@jellyfin.service" ];
@@ -412,14 +415,14 @@ else
       start_all()
 
       # virtiofsd requires source dirs to exist at mount time.
-      machine.succeed("mkdir -p /data/.state/jellyfin /data/.state/jellyseerr")
+      machine.succeed("mkdir -p /data/.state/jellyfin /data/.state/seerr")
 
       # microvm@jellyfin becomes active only after all guest setup oneshots complete
       # (wizard, users, system-config, encoding, branding, libraries); generous timeout.
       machine.wait_for_unit("microvm@jellyfin.service", timeout=1200)
-      # Wait for the host-side poll service, not microvm@jellyseerr.service: vsock READY
-      # fires when the guest reaches multi-user.target, before Jellyseerr binds port 5055.
-      machine.wait_for_unit("jellyseerr.service", timeout=600)
+      # Wait for the host-side poll service, not microvm@seerr.service: vsock READY
+      # fires when the guest reaches multi-user.target, before Seerr binds port 5055.
+      machine.wait_for_unit("seerr.service", timeout=600)
 
       # Auth token lives inside the guest; use AuthenticateByName instead.
       import json
@@ -456,10 +459,10 @@ else
           "curl -sf http://10.100.0.31:5055/api/v1/settings/public"
       ))
       assert public.get("initialized") == True, (
-          f"Jellyseerr setup service should have initialized Jellyseerr, got: {public}"
+          f"Seerr setup service should have initialized Seerr, got: {public}"
       )
-      print("Jellyseerr initialization verified (cross-VM auth to Jellyfin succeeded)")
+      print("Seerr initialization verified (cross-VM auth to Jellyfin succeeded)")
 
-      print("microvm-jellyfin-jellyseerr: both VMs started; all verifications passed")
+      print("microvm-jellyfin-seerr: both VMs started; all verifications passed")
     '';
   }

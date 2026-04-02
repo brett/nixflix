@@ -486,9 +486,9 @@ in
       echo 'PASS: downloadarr-microvm-host' > $out
     '';
 
-  # Verify jellyseerr microvm registers in microVMHostConfigurations and
+  # Verify seerr microvm registers in microVMHostConfigurations and
   # pushes extraModules for radarr/sonarr hostname overrides.
-  jellyseerr-microvm-registration =
+  seerr-microvm-registration =
     let
       config = evalConfigMicrovm [
         {
@@ -496,7 +496,7 @@ in
             enable = true;
             microvm.enable = true;
 
-            jellyseerr = {
+            seerr = {
               enable = true;
               microvm.enable = true;
             };
@@ -523,14 +523,14 @@ in
       ];
       inherit (config.config.nixflix) globals;
     in
-    pkgs.runCommand "unit-test-jellyseerr-microvm-registration" { } ''
-      ${check "jellyseerr registered in microVMHostConfigurations" (
-        globals.microVMHostConfigurations ? jellyseerr
+    pkgs.runCommand "unit-test-seerr-microvm-registration" { } ''
+      ${check "seerr registered in microVMHostConfigurations" (
+        globals.microVMHostConfigurations ? seerr
       )}
-      ${check "jellyseerr extraModules is non-empty" (
-        builtins.length globals.microVMHostConfigurations.jellyseerr.extraModules > 0
+      ${check "seerr extraModules is non-empty" (
+        builtins.length globals.microVMHostConfigurations.seerr.extraModules > 0
       )}
-      echo 'PASS: jellyseerr-microvm-registration' > $out
+      echo 'PASS: seerr-microvm-registration' > $out
     '';
 
   vpn-bypass-exclusion =
@@ -562,9 +562,7 @@ in
       ${check "qbittorrent has vpnBypass = false (routes through VPN)" (
         !globals.microVMHostConfigurations.qbittorrent.vpnBypass
       )}
-      ${check "postgres has explicit vpnBypass = true (bypasses VPN)" (
-        globals.microVMHostConfigurations.postgres.vpnBypass
-      )}
+      ${check "postgres has explicit vpnBypass = true (bypasses VPN)" globals.microVMHostConfigurations.postgres.vpnBypass}
       echo 'PASS: vpn-bypass-exclusion' > $out
     '';
 
@@ -670,14 +668,17 @@ in
             enable = true;
             microvm.enable = true;
 
-            postgres = { enable = true; microvm.enable = true; };
+            postgres = {
+              enable = true;
+              microvm.enable = true;
+            };
 
             jellyfin = {
               enable = true;
               microvm.enable = true;
             };
 
-            jellyseerr = {
+            seerr = {
               enable = true;
               microvm.enable = true;
             };
@@ -731,14 +732,14 @@ in
       vms = config.config.nixflix.globals.microVMHostConfigurations;
     in
     pkgs.runCommand "unit-test-microvm-media-scoping" { } ''
-      ${check "postgres: needsMedia = false" (!( vms.postgres.needsMedia or true))}
+      ${check "postgres: needsMedia = false" (!(vms.postgres.needsMedia or true))}
       ${check "postgres: needsDownloads = false" (!(vms.postgres.needsDownloads or true))}
 
       ${check "jellyfin: readOnlyMedia = true" (vms.jellyfin.readOnlyMedia or false)}
       ${check "jellyfin: needsDownloads = false" (!(vms.jellyfin.needsDownloads or true))}
 
-      ${check "jellyseerr: needsMedia = false" (!(vms.jellyseerr.needsMedia or true))}
-      ${check "jellyseerr: needsDownloads = false" (!(vms.jellyseerr.needsDownloads or true))}
+      ${check "seerr: needsMedia = false" (!(vms.seerr.needsMedia or true))}
+      ${check "seerr: needsDownloads = false" (!(vms.seerr.needsDownloads or true))}
 
       ${check "prowlarr: needsMedia = false" (!(vms.prowlarr.needsMedia or true))}
       ${check "prowlarr: needsDownloads = false" (!(vms.prowlarr.needsDownloads or true))}

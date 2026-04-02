@@ -254,6 +254,9 @@ else
 
           jellyfin = {
             enable = true;
+            apiKey = {
+              _secret = pkgs.writeText "jellyfin-apikey" "jellyfinApiKey1111111111111111111";
+            };
             microvm = {
               enable = true;
               startAfter = [ "microvm@qbittorrent.service" ];
@@ -266,7 +269,7 @@ else
             };
           };
 
-          jellyseerr = {
+          seerr = {
             enable = true;
             microvm = {
               enable = true;
@@ -395,7 +398,7 @@ else
           " /data/.state/postgres /data/.state/sonarr /data/.state/sonarr-anime"
           " /data/.state/radarr /data/.state/lidarr /data/.state/prowlarr"
           " /data/.state/sabnzbd /data/.state/qbittorrent"
-          " /data/.state/jellyfin /data/.state/jellyseerr"
+          " /data/.state/jellyfin /data/.state/seerr"
           " /data/media /data/downloads /data/downloads/torrent"
           " /media/tv /media/anime /media/movies /media/music"
       )
@@ -411,8 +414,8 @@ else
       machine.wait_for_unit("qbittorrent.service", timeout=600)
       # jellyfin-guest-ready polls the HTTP API; can be slow on first boot.
       machine.wait_for_unit("microvm@jellyfin.service", timeout=900)
-      # Host-side poll service, not microvm@jellyseerr: vsock READY fires before port 5055 binds.
-      machine.wait_for_unit("jellyseerr.service", timeout=600)
+      # Host-side poll service, not microvm@seerr: vsock READY fires before port 5055 binds.
+      machine.wait_for_unit("seerr.service", timeout=600)
 
       # ── Verify VPN bypass nftables rules ─────────────────────────────────────
       machine.wait_for_unit("nftables.service", timeout=30)
@@ -580,19 +583,19 @@ else
           "curl -sf http://10.100.0.31:5055/api/v1/settings/public"
       ))
       assert public.get("initialized") == True, (
-          f"Jellyseerr setup service should have initialized Jellyseerr, got: {public}"
+          f"Seerr setup service should have initialized Seerr, got: {public}"
       )
-      print("Jellyseerr initialization verified (cross-VM auth to Jellyfin succeeded)")
-      # Also verify jellyseerr nginx route
-      jellyseerr_code = machine.succeed(
+      print("Seerr initialization verified (cross-VM auth to Jellyfin succeeded)")
+      # Also verify seerr nginx route
+      seerr_code = machine.succeed(
           "curl -s -o /dev/null -w '%{http_code}' "
-          "--resolve jellyseerr.nixflix.test:80:127.0.0.1 "
-          "http://jellyseerr.nixflix.test/api/v1/status"
+          "--resolve seerr.nixflix.test:80:127.0.0.1 "
+          "http://seerr.nixflix.test/api/v1/status"
       ).strip()
-      assert jellyseerr_code in ("200", "401"), (
-          f"Expected 200/401 from jellyseerr nginx, got: {jellyseerr_code}"
+      assert seerr_code in ("200", "401"), (
+          f"Expected 200/401 from seerr nginx, got: {seerr_code}"
       )
-      print("Jellyseerr API and nginx verified")
+      print("Seerr API and nginx verified")
 
       print(
           "microvm-full-stack: all 10 VMs started, all APIs reachable, "

@@ -11,7 +11,7 @@ pkgs.testers.runNixOSTest {
   name = "mullvad-integration-test";
 
   nodes.machine =
-    { pkgs, ... }:
+    { ... }:
     {
       imports = [ nixosModules ];
 

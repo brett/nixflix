@@ -11,7 +11,10 @@ let
   kvmModules =
     pkgs.lib.optional (pkgs.lib.hasInfix "GenuineIntel" cpuInfo) "kvm-intel"
     ++ pkgs.lib.optional (pkgs.lib.hasInfix "AuthenticAMD" cpuInfo) "kvm-amd"
-    ++ pkgs.lib.optionals (cpuInfo == "") [ "kvm-intel" "kvm-amd" ];
+    ++ pkgs.lib.optionals (cpuInfo == "") [
+      "kvm-intel"
+      "kvm-amd"
+    ];
 in
 {
   pkgsUnfree = import pkgs.path {
