@@ -16,7 +16,7 @@ let
   };
 in
 {
-  config = mkIf (nixflix.enable && cfg.enable) {
+  config = mkIf (nixflix.enable && cfg.enable && cfg.apiKey != null) {
     systemd.services.jellyfin-api-key = {
       description = "Inject Jellyfin API key into database";
       after = [ "jellyfin.service" ];

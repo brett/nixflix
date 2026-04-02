@@ -26,6 +26,7 @@ in
     };
 
     apiKey = secrets.mkSecretOption {
+      nullable = true;
       description = "API key to inject into Jellyfin's database. Used by nixflix management services to authenticate to Jellyfin without relying on admin user passwords.";
     };
 
