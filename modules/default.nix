@@ -199,6 +199,11 @@ in
         user = "root";
         group = "root";
       };
+    }
+    # In microVM guests, media/downloads are host-managed virtiofs mounts.
+    # Attempting to set permissions on them fails with EROFS (read-only) or
+    # is unnecessary (rw mounts already have correct host ownership).
+    // optionalAttrs (!cfg.isGuest) {
       "${cfg.mediaDir}".d = {
         mode = "0774";
         inherit (globals.libraryOwner) user;
