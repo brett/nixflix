@@ -56,7 +56,7 @@
     policy.isAdministrator = true;
   };
 
-  nixflix.jellyseerr.enable = true;
-  nixflix.jellyseerr.microvm.enable = true;
-  nixflix.jellyseerr.microvm.memoryMB = 1536;
+  nixflix.seerr.enable = true;
+  nixflix.seerr.microvm.enable = true;
+  nixflix.seerr.microvm.memoryMB = 1536;
 }
