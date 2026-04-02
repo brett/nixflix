@@ -112,13 +112,13 @@ in
           {
             nixflix.jellyfin = {
               inherit (cfg)
-                apiKey
                 users
                 system
                 branding
                 encoding
                 libraries
                 ;
+              apiKey = lib.mkIf (cfg.apiKey != null) cfg.apiKey;
               # localNetworkAddresses defaults to ["127.0.0.1"] in nginx-proxy mode, which
               # restricts Kestrel to loopback. Add the bridge IP for host access, keep
               # 127.0.0.1 for in-guest services, and disable virtual-interface filtering.
