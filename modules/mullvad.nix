@@ -145,7 +145,6 @@ in
     # src_valid_mark required so reply packets from bypass ports pass the source-address check.
     boot.kernel.sysctl."net.ipv4.conf.all.src_valid_mark" = mkIf (cfg.bypassPorts != [ ]) 1;
 
-    networking.nftables.enable = mkIf (cfg.bypassPorts != [ ]) true;
     networking.nftables.tables."mullvad-bypass" = mkIf (cfg.bypassPorts != [ ]) {
         family = "inet";
         content = ''
@@ -319,7 +318,7 @@ in
       };
     };
 
-    networking.nftables.enable = mkIf cfg.tailscale.enable true;
+    networking.nftables.enable = mkIf (cfg.tailscale.enable || cfg.bypassPorts != [ ]) true;
 
     networking.nftables.tables."mullvad-tailscale" = mkIf cfg.tailscale.enable {
       enable = true;
