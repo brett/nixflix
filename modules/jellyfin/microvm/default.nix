@@ -101,17 +101,18 @@ in
               let
                 port = toString cfg.network.internalHttpPort;
                 hostAddr = config.nixflix.microvm.network.hostAddress;
-                jellyseerrSuffix = optionalString
-                  (config.nixflix.jellyseerr.enable && config.nixflix.jellyseerr.microvm.enable)
-                  ", ${config.nixflix.jellyseerr.microvm.address}";
+                seerrSuffix = optionalString (
+                  config.nixflix.seerr.enable && config.nixflix.seerr.microvm.enable
+                ) ", ${config.nixflix.seerr.microvm.address}";
               in
               ''
-                ip saddr { ${hostAddr}${jellyseerrSuffix} } tcp dport ${port} accept
+                ip saddr { ${hostAddr}${seerrSuffix} } tcp dport ${port} accept
               '';
           }
           {
             nixflix.jellyfin = {
               inherit (cfg)
+                apiKey
                 users
                 system
                 branding
@@ -134,17 +135,26 @@ in
             systemd.services.jellyfin.serviceConfig.StandardOutput = lib.mkForce "journal+console";
             systemd.services.jellyfin.serviceConfig.StandardError = lib.mkForce "journal+console";
           }
-        ] ++ optionals (microvmCfg.gpuDevice != null) [
+        ]
+        ++ optionals (microvmCfg.gpuDevice != null) [
           {
             # microvm.nix unbinds the device from its host driver before handing it to the guest.
-            microvm.devices = [ { bus = "pci"; path = microvmCfg.gpuDevice; } ];
+            microvm.devices = [
+              {
+                bus = "pci";
+                path = microvmCfg.gpuDevice;
+              }
+            ];
             hardware.graphics.enable = true;
           }
         ];
       };
 
       # VFIO requires the host kernel to have vfio-pci loaded before VM start.
-      boot.kernelModules = optionals (microvmCfg.gpuDevice != null) [ "vfio" "vfio-pci" ];
+      boot.kernelModules = optionals (microvmCfg.gpuDevice != null) [
+        "vfio"
+        "vfio-pci"
+      ];
 
       nixflix.globals.serviceAddresses.jellyfin = microvmCfg.address;
 
@@ -247,7 +257,7 @@ in
           mkForce "http://${microvmCfg.address}:${toString cfg.network.internalHttpPort}";
       };
 
-      nixflix.jellyseerr.jellyfin.hostname = mkIf config.nixflix.jellyseerr.enable microvmCfg.address;
+      nixflix.seerr.jellyfin.hostname = mkIf config.nixflix.seerr.enable microvmCfg.address;
     })
   ];
 }

@@ -76,13 +76,20 @@ in
               let
                 port = toString cfg.settings.misc.port;
                 hostAddr = config.nixflix.microvm.network.hostAddress;
-                arrSuffixes = concatMapStrings
-                  (svc:
-                    optionalString
-                      (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
-                      ", ${config.nixflix.${svc}.microvm.address}"
-                  )
-                  [ "sonarr" "sonarr-anime" "radarr" "lidarr" "prowlarr" ];
+                arrSuffixes =
+                  concatMapStrings
+                    (
+                      svc:
+                      optionalString (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
+                        ", ${config.nixflix.${svc}.microvm.address}"
+                    )
+                    [
+                      "sonarr"
+                      "sonarr-anime"
+                      "radarr"
+                      "lidarr"
+                      "prowlarr"
+                    ];
               in
               ''
                 ip saddr { ${hostAddr}${arrSuffixes} } tcp dport ${port} accept
@@ -118,7 +125,7 @@ in
           wantedBy = [ "multi-user.target" ];
           serviceConfig =
             let
-              port = cfg.settings.misc.port;
+              inherit (cfg.settings.misc) port;
               urlBase = cfg.settings.misc.url_base;
               apiKey = cfg.settings.misc.api_key;
             in

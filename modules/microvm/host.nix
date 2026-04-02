@@ -18,7 +18,10 @@ let
   kvmModules =
     lib.optional (lib.hasInfix "GenuineIntel" cpuInfo) "kvm-intel"
     ++ lib.optional (lib.hasInfix "AuthenticAMD" cpuInfo) "kvm-amd"
-    ++ lib.optionals (cpuInfo == "") [ "kvm-intel" "kvm-amd" ];
+    ++ lib.optionals (cpuInfo == "") [
+      "kvm-intel"
+      "kvm-amd"
+    ];
 
   # Detect whether the user has sops-nix / agenix imported AND has declared
   # at least one secret.  We check options first (short-circuit) so that
@@ -57,7 +60,11 @@ in
   imports = [ microvm.nixosModules.host ];
 
   config = mkIf cfg.enable {
-    boot.kernelModules = [ "tun" "tap" ] ++ kvmModules;
+    boot.kernelModules = [
+      "tun"
+      "tap"
+    ]
+    ++ kvmModules;
 
     # The upstream microvm.nixosModules.host unconditionally adds both
     # "kvm-intel" and "kvm-amd" to boot.kernelModules.  NixOS merges lists so

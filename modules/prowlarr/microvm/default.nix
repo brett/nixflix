@@ -100,13 +100,19 @@ in
             let
               port = toString cfg.config.hostConfig.port;
               hostAddr = config.nixflix.microvm.network.hostAddress;
-              arrSuffixes = concatMapStrings
-                (svc:
-                  optionalString
-                    (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
-                    ", ${config.nixflix.${svc}.microvm.address}"
-                )
-                [ "sonarr" "sonarr-anime" "radarr" "lidarr" ];
+              arrSuffixes =
+                concatMapStrings
+                  (
+                    svc:
+                    optionalString (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
+                      ", ${config.nixflix.${svc}.microvm.address}"
+                  )
+                  [
+                    "sonarr"
+                    "sonarr-anime"
+                    "radarr"
+                    "lidarr"
+                  ];
             in
             ''
               ip saddr { ${hostAddr}${arrSuffixes} } tcp dport ${port} accept

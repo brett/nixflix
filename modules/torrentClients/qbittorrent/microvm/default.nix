@@ -6,7 +6,6 @@
 }:
 with lib;
 let
-  secrets = import ../../../../lib/secrets { inherit lib; };
   cfg = config.nixflix.torrentClients.qbittorrent;
   microvmCfg = cfg.microvm;
   isEnabled = cfg.enable && microvmCfg.enable;
@@ -76,13 +75,20 @@ in
               let
                 port = toString cfg.webuiPort;
                 hostAddr = config.nixflix.microvm.network.hostAddress;
-                arrSuffixes = concatMapStrings
-                  (svc:
-                    optionalString
-                      (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
-                      ", ${config.nixflix.${svc}.microvm.address}"
-                  )
-                  [ "sonarr" "sonarr-anime" "radarr" "lidarr" "prowlarr" ];
+                arrSuffixes =
+                  concatMapStrings
+                    (
+                      svc:
+                      optionalString (config.nixflix.${svc}.enable && config.nixflix.${svc}.microvm.enable)
+                        ", ${config.nixflix.${svc}.microvm.address}"
+                    )
+                    [
+                      "sonarr"
+                      "sonarr-anime"
+                      "radarr"
+                      "lidarr"
+                      "prowlarr"
+                    ];
               in
               ''
                 ip saddr { ${hostAddr}${arrSuffixes} } tcp dport ${port} accept
@@ -98,12 +104,25 @@ in
               # apply the WebUI password without needing to authenticate first.
               serverConfig = lib.recursiveUpdate cfg.serverConfig {
                 Preferences.WebUI.AuthSubnetWhitelistEnabled = true;
-                Preferences.WebUI.AuthSubnetWhitelist = lib.concatStringsSep ","
-                  (lib.filter (s: s != "") (map (svc:
-                    if (config.nixflix.${svc}.enable or false) && (config.nixflix.${svc}.microvm.enable or false)
-                    then config.nixflix.${svc}.microvm.address
-                    else ""
-                  ) [ "sonarr" "sonarr-anime" "radarr" "lidarr" "prowlarr" ]));
+                Preferences.WebUI.AuthSubnetWhitelist = lib.concatStringsSep "," (
+                  lib.filter (s: s != "") (
+                    map
+                      (
+                        svc:
+                        if (config.nixflix.${svc}.enable or false) && (config.nixflix.${svc}.microvm.enable or false) then
+                          config.nixflix.${svc}.microvm.address
+                        else
+                          ""
+                      )
+                      [
+                        "sonarr"
+                        "sonarr-anime"
+                        "radarr"
+                        "lidarr"
+                        "prowlarr"
+                      ]
+                  )
+                );
                 Preferences.WebUI.LocalhostAuth = false;
               };
               inherit (cfg) password;
@@ -116,7 +135,6 @@ in
           (
             let
               port = cfg.webuiPort;
-              username = cfg.serverConfig.Preferences.WebUI.Username or "admin";
             in
             { pkgs, ... }:
             {
@@ -214,8 +232,7 @@ in
                 description = "Initialize qBittorrent WebUI password (PBKDF2 hash)";
                 wantedBy = [ "multi-user.target" ];
                 before = [ "qbittorrent.service" ];
-                after = [ "systemd-tmpfiles-setup.service" ]
-                  ++ lib.optional needsRunSecrets "run-secrets.mount";
+                after = [ "systemd-tmpfiles-setup.service" ] ++ lib.optional needsRunSecrets "run-secrets.mount";
                 requires = lib.optional needsRunSecrets "run-secrets.mount";
                 serviceConfig = {
                   Type = "oneshot";

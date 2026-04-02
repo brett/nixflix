@@ -88,10 +88,13 @@ in
           }
           # Without this, the arr service races the virtiofs mount and can create
           # config.xml in the guest-local overlay before the host share is visible.
-          ({ config, ... }: {
-            systemd.services."${serviceName}".unitConfig.RequiresMountsFor =
-              "${config.nixflix.stateDir}/${serviceName}";
-          })
+          (
+            { config, ... }:
+            {
+              systemd.services."${serviceName}".unitConfig.RequiresMountsFor =
+                "${config.nixflix.stateDir}/${serviceName}";
+            }
+          )
           # Clear ExecStartPost: remote postgres migrations can take many minutes,
           # triggering Restart=on-failure before the service is ready.
           (_: {
@@ -103,10 +106,10 @@ in
             let
               inherit (cfg.config.hostConfig) port;
               inherit (cfg.config) apiVersion;
-              apiKeySetup = optionalString (cfg.config.apiKey != null)
-                "API_KEY=${secrets.toShellValue cfg.config.apiKey}";
-              apiKeyArg = optionalString (cfg.config.apiKey != null)
-                "-H \"X-Api-Key: $API_KEY\"";
+              apiKeySetup = optionalString (
+                cfg.config.apiKey != null
+              ) "API_KEY=${secrets.toShellValue cfg.config.apiKey}";
+              apiKeyArg = optionalString (cfg.config.apiKey != null) "-H \"X-Api-Key: $API_KEY\"";
               acceptCondition =
                 if cfg.config.apiKey != null then
                   ''[ "$HTTP_CODE" = "200" ]''
@@ -162,10 +165,8 @@ in
           # After guest-ready (not just the service) — the API isn't stable until
           # sonarr-config has run the sed fix and restarted sonarr.
           (_: {
-            systemd.services."${serviceName}-rootfolders".after =
-              [ "${serviceName}-guest-ready.service" ];
-            systemd.services."${serviceName}-delayprofiles".after =
-              [ "${serviceName}-guest-ready.service" ];
+            systemd.services."${serviceName}-rootfolders".after = [ "${serviceName}-guest-ready.service" ];
+            systemd.services."${serviceName}-delayprofiles".after = [ "${serviceName}-guest-ready.service" ];
           })
         ]
         ++ optionals (cfg ? mediaDirs && cfg.mediaDirs != [ ]) [
@@ -241,15 +242,15 @@ in
               let
                 port = toString cfg.config.hostConfig.port;
                 hostAddr = config.nixflix.microvm.network.hostAddress;
-                prowlarrSuffix = optionalString
-                  (config.nixflix.prowlarr.enable && config.nixflix.prowlarr.microvm.enable)
-                  ", ${config.nixflix.prowlarr.microvm.address}";
-                jellyseerrSuffix = optionalString
-                  (serviceName != "lidarr" && config.nixflix.jellyseerr.enable && config.nixflix.jellyseerr.microvm.enable)
-                  ", ${config.nixflix.jellyseerr.microvm.address}";
+                prowlarrSuffix = optionalString (
+                  config.nixflix.prowlarr.enable && config.nixflix.prowlarr.microvm.enable
+                ) ", ${config.nixflix.prowlarr.microvm.address}";
+                seerrSuffix = optionalString (
+                  serviceName != "lidarr" && config.nixflix.seerr.enable && config.nixflix.seerr.microvm.enable
+                ) ", ${config.nixflix.seerr.microvm.address}";
               in
               ''
-                ip saddr { ${hostAddr}${prowlarrSuffix}${jellyseerrSuffix} } tcp dport ${port} accept
+                ip saddr { ${hostAddr}${prowlarrSuffix}${seerrSuffix} } tcp dport ${port} accept
               '';
           }
         ]
@@ -399,12 +400,12 @@ in
         "${serviceName}-config" = mkForce (
           let
             port = toString cfg.config.hostConfig.port;
-            apiVersion = cfg.config.apiVersion;
+            inherit (cfg.config) apiVersion;
             addr = microvmCfg.address;
-            apiKeySetup = optionalString (cfg.config.apiKey != null)
-              "API_KEY=${secrets.toShellValue cfg.config.apiKey}";
-            apiKeyArg = optionalString (cfg.config.apiKey != null)
-              "-H \"X-Api-Key: $API_KEY\"";
+            apiKeySetup = optionalString (
+              cfg.config.apiKey != null
+            ) "API_KEY=${secrets.toShellValue cfg.config.apiKey}";
+            apiKeyArg = optionalString (cfg.config.apiKey != null) "-H \"X-Api-Key: $API_KEY\"";
             acceptCondition =
               if cfg.config.apiKey != null then
                 ''[ "$HTTP_CODE" = "200" ]''

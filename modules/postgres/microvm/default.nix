@@ -21,9 +21,7 @@ let
         "radarr"
         "lidarr"
       ]
-    ++ lib.optional
-      (config.nixflix.jellyseerr.enable && config.nixflix.jellyseerr.microvm.enable)
-      "jellyseerr";
+    ++ lib.optional (config.nixflix.seerr.enable && config.nixflix.seerr.microvm.enable) "seerr";
 in
 {
   options.nixflix.postgres.microvm = {
@@ -37,7 +35,7 @@ in
 
     vcpus = mkOption {
       type = types.int;
-      default = 2;
+      default = config.nixflix.microvm.defaults.vcpus;
       description = "Number of vCPUs for the PostgreSQL microVM";
     };
 
@@ -121,13 +119,12 @@ in
                       ]
                   )
               )
-              + lib.optionalString (config.nixflix.jellyseerr.enable && config.nixflix.jellyseerr.microvm.enable)
-                ''
-                  host jellyseerr jellyseerr ${config.nixflix.jellyseerr.microvm.address}/32 trust
-                ''
+              + lib.optionalString (config.nixflix.seerr.enable && config.nixflix.seerr.microvm.enable) ''
+                host seerr seerr ${config.nixflix.seerr.microvm.address}/32 trust
+              ''
               + ''
-                  host all all ${config.nixflix.microvm.network.hostAddress}/32 trust
-                ''
+                host all all ${config.nixflix.microvm.network.hostAddress}/32 trust
+              ''
             );
           }
           {
@@ -137,9 +134,7 @@ in
             networking.firewall.extraInputRules =
               let
                 serviceIPs = lib.optionalString (enabledDbServices != [ ]) (
-                  lib.concatStringsSep ", " (
-                    map (svc: config.nixflix.${svc}.microvm.address) enabledDbServices
-                  )
+                  lib.concatStringsSep ", " (map (svc: config.nixflix.${svc}.microvm.address) enabledDbServices)
                 );
                 hostAddr = config.nixflix.microvm.network.hostAddress;
                 allIPs = if enabledDbServices != [ ] then "${serviceIPs}, ${hostAddr}" else hostAddr;

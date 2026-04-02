@@ -6,7 +6,9 @@ let
   # VMs default to vpnBypass = false (route through VPN), matching the non-microVM
   # mullvad-exclude opt-out model. Services that must reach the internet set vpnBypass = true.
   bypassAddresses = mapAttrsToList (_name: vmCfg: vmCfg.address) (
-    filterAttrs (_name: vmCfg: vmCfg.vpnBypass or false) config.nixflix.globals.microVMHostConfigurations
+    filterAttrs (
+      _name: vmCfg: vmCfg.vpnBypass or false
+    ) config.nixflix.globals.microVMHostConfigurations
   );
 in
 # Marks 0x00000f41 / 0x6d6f6c65 match Mullvad's per-app exclude mechanism.
