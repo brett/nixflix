@@ -88,7 +88,7 @@ SERVICES=(
   "prowlarr    10.100.0.14  9696  /api/v1/system/status"
   "qbittorrent 10.100.0.21  8282  /api/v2/app/version"
   "jellyfin    10.100.0.30  8096  /health"
-  "jellyseerr  10.100.0.31  5055  /api/v1/status"
+  "seerr       10.100.0.31  5055  /api/v1/status"
 )
 
 # Map short name → microvm unit name
