@@ -35,6 +35,6 @@ in
     qbittorrent = mkDefault (mkAddr 21);
     # Media
     jellyfin = mkDefault (mkAddr 30);
-    jellyseerr = mkDefault (mkAddr 31);
+    seerr = mkDefault (mkAddr 31);
   };
 }

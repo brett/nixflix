@@ -6,7 +6,7 @@
 }:
 with lib;
 let
-  cfg = config.nixflix.jellyseerr;
+  cfg = config.nixflix.seerr;
   microvmCfg = cfg.microvm;
   isEnabled = cfg.enable && microvmCfg.enable;
   hostname = "${cfg.subdomain}.${config.nixflix.nginx.domain}";
@@ -43,25 +43,25 @@ let
   ) cfg.sonarr;
 in
 {
-  options.nixflix.jellyseerr.microvm = {
-    enable = mkEnableOption "Jellyseerr microVM isolation";
+  options.nixflix.seerr.microvm = {
+    enable = mkEnableOption "Seerr microVM isolation";
 
     address = mkOption {
       type = types.str;
-      default = config.nixflix.microvm.addresses.jellyseerr;
-      description = "Static IP address for the Jellyseerr microVM";
+      default = config.nixflix.microvm.addresses.seerr;
+      description = "Static IP address for the Seerr microVM";
     };
 
     vcpus = mkOption {
       type = types.int;
       default = config.nixflix.microvm.defaults.vcpus;
-      description = "Number of vCPUs for the Jellyseerr microVM";
+      description = "Number of vCPUs for the Seerr microVM";
     };
 
     memoryMB = mkOption {
       type = types.int;
       default = 1536;
-      description = "Memory in MB for the Jellyseerr microVM";
+      description = "Memory in MB for the Seerr microVM";
     };
 
     startAfter = mkOption {
@@ -69,8 +69,8 @@ in
       default = [ "postgresql-ready.target" ];
       description = ''
         Systemd units added to After= and Wants= on the host-side
-        microvm@jellyseerr.service drop-in. Defaults to postgresql-ready.target
-        because Jellyseerr stores its state in PostgreSQL.
+        microvm@seerr.service drop-in. Defaults to postgresql-ready.target
+        because Seerr stores its state in PostgreSQL.
       '';
     };
   };
@@ -80,12 +80,12 @@ in
       assertions = [
         {
           assertion = !microvmCfg.enable || config.nixflix.microvm.enable;
-          message = "nixflix.jellyseerr.microvm.enable requires nixflix.microvm.enable = true";
+          message = "nixflix.seerr.microvm.enable requires nixflix.microvm.enable = true";
         }
       ];
     }
     (mkIf isEnabled {
-      nixflix.globals.microVMHostConfigurations.jellyseerr = {
+      nixflix.globals.microVMHostConfigurations.seerr = {
         module = ./configuration.nix;
         inherit (microvmCfg) address;
         inherit (microvmCfg) vcpus;
@@ -107,16 +107,16 @@ in
               '';
           }
           {
-            nixflix.jellyseerr.jellyfin = {
+            nixflix.seerr.jellyfin = {
               hostname = mkIf config.nixflix.jellyfin.microvm.enable config.nixflix.jellyfin.microvm.address;
-              # jellyfin.enable is false in the jellyseerr guest so these can't
+              # jellyfin.enable is false in the seerr guest so these can't
               # be auto-derived; forward the host-resolved values directly.
               adminUsername = mkForce cfg.jellyfin.adminUsername;
               adminPassword = mkForce cfg.jellyfin.adminPassword;
             };
-            nixflix.jellyseerr.apiKey = mkForce cfg.apiKey;
-            nixflix.jellyseerr.radarr = mkForce guestRadarr;
-            nixflix.jellyseerr.sonarr = mkForce guestSonarr;
+            nixflix.seerr.apiKey = mkForce cfg.apiKey;
+            nixflix.seerr.radarr = mkForce guestRadarr;
+            nixflix.seerr.sonarr = mkForce guestSonarr;
           }
         ]
         ++ optionals config.nixflix.postgres.microvm.enable [
@@ -128,23 +128,23 @@ in
             {
               # Connect to postgres microVM via TCP instead of Unix socket.
               # services.postgresql.enable is false in the guest; inject env vars directly.
-              systemd.services.jellyseerr.environment = {
+              systemd.services.seerr.environment = {
                 DB_TYPE = "postgres";
                 DB_HOST = postgresHost;
                 DB_PORT = "5432";
-                DB_USER = "jellyseerr";
-                DB_NAME = "jellyseerr";
+                DB_USER = "seerr";
+                DB_NAME = "seerr";
                 DB_LOG_QUERIES = "false";
               };
-              systemd.services.jellyseerr-wait-for-db = {
+              systemd.services.seerr-wait-for-db = {
                 description = "Wait for PostgreSQL microVM at ${postgresHost}";
                 wantedBy = [ "multi-user.target" ];
-                before = [ "jellyseerr.service" ];
+                before = [ "seerr.service" ];
                 serviceConfig = {
                   Type = "oneshot";
                   RemainAfterExit = true;
                   TimeoutStartSec = "5min";
-                  ExecStart = pkgs.writeShellScript "jellyseerr-wait-for-db" ''
+                  ExecStart = pkgs.writeShellScript "seerr-wait-for-db" ''
                     set -eu
                     echo "Waiting for PostgreSQL at ${postgresHost}:5432..."
                     for i in $(seq 1 150); do
@@ -161,55 +161,55 @@ in
                   '';
                 };
               };
-              systemd.services.jellyseerr = {
-                after = [ "jellyseerr-wait-for-db.service" ];
-                requires = [ "jellyseerr-wait-for-db.service" ];
+              systemd.services.seerr = {
+                after = [ "seerr-wait-for-db.service" ];
+                requires = [ "seerr-wait-for-db.service" ];
               };
             }
           )
         ];
       };
 
-      nixflix.globals.serviceAddresses.jellyseerr = microvmCfg.address;
+      nixflix.globals.serviceAddresses.seerr = microvmCfg.address;
 
-      systemd.services."microvm@jellyseerr" = mkIf (microvmCfg.startAfter != [ ]) {
+      systemd.services."microvm@seerr" = mkIf (microvmCfg.startAfter != [ ]) {
         after = microvmCfg.startAfter;
         wants = microvmCfg.startAfter;
       };
 
       systemd.services = {
-        jellyseerr = mkForce {
-          description = "Wait for Jellyseerr HTTP API to be ready (host-side poll)";
-          after = [ "microvm@jellyseerr.service" ];
-          requires = [ "microvm@jellyseerr.service" ];
+        seerr = mkForce {
+          description = "Wait for Seerr HTTP API to be ready (host-side poll)";
+          after = [ "microvm@seerr.service" ];
+          requires = [ "microvm@seerr.service" ];
           wantedBy = [ "multi-user.target" ];
           serviceConfig = {
             Type = "oneshot";
             RemainAfterExit = true;
             TimeoutStartSec = "600";
-            ExecStart = pkgs.writeShellScript "jellyseerr-host-ready" ''
+            ExecStart = pkgs.writeShellScript "seerr-host-ready" ''
               set -eu
-              echo "Waiting for Jellyseerr HTTP API at ${microvmCfg.address}..."
+              echo "Waiting for Seerr HTTP API at ${microvmCfg.address}..."
               for i in $(seq 1 120); do
                 HTTP_CODE=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
                   --connect-timeout 2 --max-time 5 \
                   "http://${microvmCfg.address}:${toString cfg.port}/api/v1/status" \
                   2>/dev/null || echo "000")
                 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
-                  echo "Jellyseerr API ready (HTTP $HTTP_CODE)"
+                  echo "Seerr API ready (HTTP $HTTP_CODE)"
                   exit 0
                 fi
                 echo "Attempt $i/120 (HTTP $HTTP_CODE)"
                 sleep 5
               done
-              echo "Timeout waiting for Jellyseerr API" >&2
+              echo "Timeout waiting for Seerr API" >&2
               exit 1
             '';
           };
         };
 
-        jellyseerr-env = mkForce {
-          description = "Jellyseerr env (disabled in microVM mode)";
+        seerr-env = mkForce {
+          description = "Seerr env (disabled in microVM mode)";
           wantedBy = [ ];
           serviceConfig = {
             Type = "oneshot";
@@ -217,48 +217,48 @@ in
           };
         };
 
-        jellyseerr-setup = mkForce {
-          description = "Jellyseerr setup (delegating to microVM)";
+        seerr-setup = mkForce {
+          description = "Seerr setup (delegating to microVM)";
           wantedBy = [ ];
           serviceConfig = {
             Type = "oneshot";
             ExecStart = "${pkgs.coreutils}/bin/true";
           };
         };
-        jellyseerr-libraries = mkForce {
-          description = "Jellyseerr libraries (delegating to microVM)";
+        seerr-libraries = mkForce {
+          description = "Seerr libraries (delegating to microVM)";
           wantedBy = [ ];
           serviceConfig = {
             Type = "oneshot";
             ExecStart = "${pkgs.coreutils}/bin/true";
           };
         };
-        jellyseerr-jellyfin = mkForce {
-          description = "Jellyseerr jellyfin (delegating to microVM)";
+        seerr-jellyfin = mkForce {
+          description = "Seerr jellyfin (delegating to microVM)";
           wantedBy = [ ];
           serviceConfig = {
             Type = "oneshot";
             ExecStart = "${pkgs.coreutils}/bin/true";
           };
         };
-        jellyseerr-user-settings = mkForce {
-          description = "Jellyseerr user settings (delegating to microVM)";
+        seerr-user-settings = mkForce {
+          description = "Seerr user settings (delegating to microVM)";
           wantedBy = [ ];
           serviceConfig = {
             Type = "oneshot";
             ExecStart = "${pkgs.coreutils}/bin/true";
           };
         };
-        jellyseerr-radarr = mkForce {
-          description = "Jellyseerr radarr (delegating to microVM)";
+        seerr-radarr = mkForce {
+          description = "Seerr radarr (delegating to microVM)";
           wantedBy = [ ];
           serviceConfig = {
             Type = "oneshot";
             ExecStart = "${pkgs.coreutils}/bin/true";
           };
         };
-        jellyseerr-sonarr = mkForce {
-          description = "Jellyseerr sonarr (delegating to microVM)";
+        seerr-sonarr = mkForce {
+          description = "Seerr sonarr (delegating to microVM)";
           wantedBy = [ ];
           serviceConfig = {
             Type = "oneshot";

@@ -207,7 +207,7 @@ The following runs every service in its own VM:
     usenetClients.sabnzbd.microvm.enable = true;
     torrentClients.qbittorrent.microvm.enable = true;
     jellyfin.microvm.enable = true;
-    jellyseerr.microvm.enable = true;
+    seerr.microvm.enable = true;
 
     # ... service-specific config (apiKey, password, etc.)
     # ... nginx, mullvad, recyclarr as normal
@@ -215,7 +215,7 @@ The following runs every service in its own VM:
 }
 ```
 
-All inter-service connections (arr→postgres, arr→prowlarr, arr→download clients, jellyseerr→arr)
+All inter-service connections (arr→postgres, arr→prowlarr, arr→download clients, seerr→arr)
 are wired automatically using the static VM IP addresses.
 
 ## Jellyfin GPU Passthrough (VFIO)

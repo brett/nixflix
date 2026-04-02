@@ -94,7 +94,7 @@
         "recyclarr"
         "downloadarr"
         "jellyfin"
-        "jellyseerr"
+        "seerr"
         "sonarr"
         "sonarr-anime"
         "radarr"

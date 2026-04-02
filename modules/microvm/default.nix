@@ -21,7 +21,7 @@
     # Service microvm registrations
     ../downloadarr/microvm
     ../jellyfin/microvm
-    ../jellyseerr/microvm
+    ../seerr/microvm
     ../lidarr/microvm
     ../postgres/microvm
     ../prowlarr/microvm

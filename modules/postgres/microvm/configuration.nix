@@ -44,7 +44,7 @@
     "radarr-logs"
     "lidarr"
     "lidarr-logs"
-    "jellyseerr"
+    "seerr"
   ];
 
   # ensureDBOwnership = true grants the user ownership of their same-named
@@ -68,7 +68,7 @@
       ensureDBOwnership = true;
     }
     {
-      name = "jellyseerr";
+      name = "seerr";
       ensureDBOwnership = true;
     }
   ];
