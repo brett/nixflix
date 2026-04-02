@@ -238,6 +238,18 @@ in
           ExecStart = "${pkgs.coreutils}/bin/true";
         };
       };
+
+      prowlarr-tags = mkForce {
+        description = "Prowlarr tags (delegating to microVM)";
+        after = [ "microvm@prowlarr.service" ];
+        requires = [ "microvm@prowlarr.service" ];
+        wantedBy = [ "multi-user.target" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${pkgs.coreutils}/bin/true";
+        };
+      };
     };
 
     services.nginx.virtualHosts."${hostname}" = mkIf config.nixflix.nginx.enable {
