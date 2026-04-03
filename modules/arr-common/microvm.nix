@@ -102,10 +102,12 @@ in
           })
           # Sonarr's PUT /api/.../config/host returns 4xx (schema mismatch), causing
           # `set -eu` + `curl -f` to exit before the restart.  sed on config.xml instead.
+          # After the BindAddress restart, we also set credentials via GET→merge→PUT.
           (
             let
               inherit (cfg.config.hostConfig) port;
               inherit (cfg.config) apiVersion;
+              hasCredentials = cfg.config.apiKey != null && cfg.config.hostConfig.password != null;
               apiKeySetup = optionalString (
                 cfg.config.apiKey != null
               ) "API_KEY=${secrets.toShellValue cfg.config.apiKey}";
@@ -115,11 +117,60 @@ in
                   ''[ "$HTTP_CODE" = "200" ]''
                 else
                   ''[ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]'';
+              jqCreds = optionalAttrs hasCredentials (secrets.mkJqSecretArgs {
+                username = cfg.config.hostConfig.username;
+                password = cfg.config.hostConfig.password;
+              });
+              credentialUpdateScript = optionalString hasCredentials ''
+                echo "Waiting for ${capitalizedName} API after restart (credentials update)..."
+                for i in $(seq 1 120); do
+                  HTTP_CODE=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
+                    --connect-timeout 1 --max-time 3 \
+                    ${apiKeyArg} \
+                    "http://127.0.0.1:${toString port}/api/${apiVersion}/system/status" \
+                    2>/dev/null || true)
+                  if ${acceptCondition}; then
+                    echo "${capitalizedName} API ready"
+                    break
+                  fi
+                  if [ "$i" = "120" ]; then
+                    echo "${capitalizedName} API not ready after 120s" >&2
+                    exit 1
+                  fi
+                  sleep 1
+                done
+
+                echo "Fetching host config to update credentials..."
+                HOST_CONFIG=$(${pkgs.curl}/bin/curl -sf ${apiKeyArg} \
+                  "http://127.0.0.1:${toString port}/api/${apiVersion}/config/host" \
+                  2>/dev/null || true)
+
+                if [ -n "$HOST_CONFIG" ]; then
+                  CONFIG_ID=$(echo "$HOST_CONFIG" | ${pkgs.jq}/bin/jq -r '.id')
+                  UPDATED_CONFIG=$(echo "$HOST_CONFIG" | ${pkgs.jq}/bin/jq \
+                    ${jqCreds.flagsString} \
+                    '.username = ${jqCreds.refs.username} | .password = ${jqCreds.refs.password} | .passwordConfirmation = ${jqCreds.refs.password}')
+                  CRED_HTTP=$(${pkgs.curl}/bin/curl -s -o /dev/null -w "%{http_code}" \
+                    -X PUT \
+                    -H "Content-Type: application/json" \
+                    ${apiKeyArg} \
+                    -d "$UPDATED_CONFIG" \
+                    "http://127.0.0.1:${toString port}/api/${apiVersion}/config/host/$CONFIG_ID" \
+                    2>/dev/null || true)
+                  if [ "$CRED_HTTP" = "200" ] || [ "$CRED_HTTP" = "202" ]; then
+                    echo "Credentials updated successfully"
+                  else
+                    echo "Warning: credential update returned HTTP $CRED_HTTP" >&2
+                  fi
+                else
+                  echo "Warning: could not fetch host config for credential update" >&2
+                fi
+              '';
             in
             { config, pkgs, ... }:
             {
               systemd.services."${serviceName}-config" = mkForce {
-                description = "Configure ${capitalizedName} bind address in microVM (pre-READY=1)";
+                description = "Configure ${capitalizedName} bind address and credentials in microVM";
                 after = [ "${serviceName}.service" ];
                 before = [ "${serviceName}-guest-ready.service" ];
                 wantedBy = [ "multi-user.target" ];
@@ -158,6 +209,7 @@ in
                   echo "Restarting ${capitalizedName}..."
                   systemctl restart ${serviceName}.service
                   echo "${capitalizedName} restarted"
+                  ${credentialUpdateScript}
                 '';
               };
             }

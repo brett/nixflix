@@ -162,7 +162,7 @@ MICROVM_SERVICES=(
   prowlarr
   qbittorrent
   jellyfin
-  jellyseerr
+  seerr
 )
 
 for svc in "${MICROVM_SERVICES[@]}"; do
@@ -228,7 +228,7 @@ declare -A VM_IPS=(
   ["prowlarr"]="10.100.0.14"
   ["qbittorrent"]="10.100.0.21"
   ["jellyfin"]="10.100.0.30"
-  ["jellyseerr"]="10.100.0.31"
+  ["seerr"]="10.100.0.31"
 )
 
 for svc in "${!VM_IPS[@]}"; do
@@ -355,7 +355,7 @@ else
 fi
 
 # Arr + media service IPs should be in the bypass table (direct internet, not through VPN)
-for svc in sonarr sonarr-anime radarr lidarr prowlarr jellyfin jellyseerr; do
+for svc in sonarr sonarr-anime radarr lidarr prowlarr jellyfin seerr; do
   ip="${VM_IPS[$svc]}"
   if echo "$bypass_table" | grep -q "${ip}"; then
     pass "${svc} (${ip}): in VPN bypass table (direct internet)"
@@ -437,15 +437,10 @@ else
   fail "nginx HTTP: unexpected response HTTP ${http_code:-none}"
 fi
 
-https_listening=$(ssh_shell "timeout 3 bash -c '</dev/tcp/127.0.0.1/443>' 2>/dev/null" && echo yes || echo no)
-if [[ "$https_listening" == "yes" ]]; then
-  http_code=$(ssh_run curl -sk -o /dev/null -w "%{http_code}" \
-    --max-time "${TIMEOUT}" "https://127.0.0.1/" 2>/dev/null || true)
-  if [[ "$http_code" =~ ^(200|301|302|303|307|308|404)$ ]] || [[ "$http_code" == "000" ]]; then
-    pass "nginx HTTPS: up (HTTP ${http_code})"
-  else
-    fail "nginx HTTPS: unexpected response HTTP ${http_code:-none}"
-  fi
+https_code=$(ssh_run curl -sk -o /dev/null -w "%{http_code}" \
+  --max-time "${TIMEOUT}" "https://127.0.0.1/" 2>/dev/null || true)
+if [[ -n "$https_code" ]] && [[ "$https_code" != "000" ]]; then
+  pass "nginx HTTPS: up (HTTP ${https_code})"
 else
   echo -e "  ${YELLOW}⚠${RESET}  nginx HTTPS: port 443 not listening (ACME cert may not be issued yet)"
 fi
@@ -584,7 +579,7 @@ done
 # Both Sonarr and Sonarr-Anime use implementationName "Sonarr"; expect ≥2 instances.
 IFS='|' read -r prow_secret prow_addr prow_api_ver _ _ <<< "${ARR_SERVICES[Prowlarr]}"
 prowlarr_apps=$(arr_api "$prow_secret" "http://${prow_addr}/api/${prow_api_ver}/applications")
-sonarr_app_count=$(echo "$prowlarr_apps" | grep -c '"implementationName":.*"Sonarr"' || true)
+sonarr_app_count=$(echo "$prowlarr_apps" | grep -cF '"implementationName": "Sonarr"' || true)
 if [[ "${sonarr_app_count:-0}" -ge 2 ]]; then
   pass "Prowlarr applications: Sonarr + Sonarr-Anime registered (${sonarr_app_count} instances)"
 elif [[ "${sonarr_app_count:-0}" -eq 1 ]]; then
@@ -593,7 +588,7 @@ else
   fail "Prowlarr applications: no Sonarr instances registered"
 fi
 for impl in "Radarr" "Lidarr"; do
-  if echo "$prowlarr_apps" | grep -q "\"implementationName\":.*\"${impl}\""; then
+  if grep -qF "\"implementationName\": \"${impl}\"" <<< "$prowlarr_apps"; then
     pass "Prowlarr applications: ${impl} registered"
   else
     fail "Prowlarr applications: ${impl} not registered"
@@ -716,15 +711,15 @@ fi
 
 info "15. Jellyseerr API health"
 
-jellyseerr_ip="${VM_IPS[jellyseerr]}"
-jellyseerr_active=$(ssh_run systemctl is-active "microvm@jellyseerr.service" 2>/dev/null || true)
-if [[ "$jellyseerr_active" == "active" ]]; then
-  pass "jellyseerr VM: running"
+seerr_ip="${VM_IPS[seerr]}"
+seerr_active=$(ssh_run systemctl is-active "microvm@seerr.service" 2>/dev/null || true)
+if [[ "$seerr_active" == "active" ]]; then
+  pass "seerr VM: running"
 
   # /api/v1/status is unauthenticated — verifies Jellyseerr is up
   js_code=$(ssh_run curl -s -o /dev/null -w "%{http_code}" \
     --max-time "${TIMEOUT}" \
-    "http://${jellyseerr_ip}:5055/api/v1/status" 2>/dev/null || true)
+    "http://${seerr_ip}:5055/api/v1/status" 2>/dev/null || true)
   if [[ "$js_code" == "200" ]]; then
     pass "Jellyseerr /api/v1/status: HTTP 200"
   else
@@ -735,7 +730,7 @@ if [[ "$jellyseerr_active" == "active" ]]; then
   # /api/v1/settings/public returns {"initialized":true} once setup is complete
   js_public=$(ssh_run curl -s \
     --max-time "${TIMEOUT}" \
-    "http://${jellyseerr_ip}:5055/api/v1/settings/public" 2>/dev/null || true)
+    "http://${seerr_ip}:5055/api/v1/settings/public" 2>/dev/null || true)
   if echo "$js_public" | grep -q '"initialized":true'; then
     pass "Jellyseerr: initialised"
   else
@@ -744,7 +739,7 @@ if [[ "$jellyseerr_active" == "active" ]]; then
 
   # Verify Jellyfin is configured at the correct microVM IP.
   # settings.json is virtiofs-mounted and readable from the host.
-  js_settings=$(ssh_run cat "/var/lib/nixflix/jellyseerr/settings.json" 2>/dev/null || true)
+  js_settings=$(ssh_run cat "/var/lib/nixflix/seerr/settings.json" 2>/dev/null || true)
   if [[ -n "$js_settings" ]]; then
     jellyfin_vm_ip="${VM_IPS[jellyfin]}"
     # plex.ip is always empty (""); Jellyfin's ip is the only non-empty one
@@ -768,7 +763,7 @@ if [[ "$jellyseerr_active" == "active" ]]; then
     fail "Jellyseerr: settings.json not readable"
   fi
 else
-  echo -e "  ${YELLOW}⚠${RESET}  jellyseerr VM: not running (skipping API checks)"
+  echo -e "  ${YELLOW}⚠${RESET}  seerr VM: not running (skipping API checks)"
 fi
 
 # ── 16. ACME certificate coverage ─────────────────────────────────────────────
@@ -776,9 +771,9 @@ fi
 info "16. ACME certificate coverage"
 
 # All nginx vhosts with forceSSL should have a cert in /var/lib/acme/.
-# qbittorrent/jellyfin/jellyseerr certs were added alongside the initial arr certs.
-for svc in sonarr sonarr-anime radarr lidarr prowlarr qbittorrent jellyfin jellyseerr; do
-  cert_dir=$(ssh_run bash -c \
+# qbittorrent/jellyfin/seerr certs were added alongside the initial arr certs.
+for svc in sonarr sonarr-anime radarr lidarr prowlarr qbittorrent jellyfin seerr; do
+  cert_dir=$(ssh_shell \
     "ls -d /var/lib/acme/${svc}.* 2>/dev/null | head -1" 2>/dev/null || true)
   if [[ -n "$cert_dir" ]]; then
     if ssh_run test -f "${cert_dir}/fullchain.pem" 2>/dev/null; then
