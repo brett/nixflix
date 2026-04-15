@@ -249,8 +249,8 @@ in
       };
 
       services.nginx.virtualHosts."${hostname}" = mkIf config.nixflix.nginx.enable {
-        enableACME = config.nixflix.nginx.acme.enable;
-        forceSSL = config.nixflix.nginx.acme.enable;
+        inherit (config.nixflix.nginx) forceSSL;
+        useACMEHost = if config.nixflix.nginx.enableACME then config.nixflix.nginx.domain else null;
         locations."/".proxyPass =
           mkForce "http://${microvmCfg.address}:${toString cfg.network.internalHttpPort}";
         locations."/socket".proxyPass =
