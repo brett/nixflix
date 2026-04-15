@@ -11,6 +11,10 @@
       url = "github:ruslanlap/mkdocs-catppuccin";
       flake = false;
     };
+    microvm = {
+      url = "github:astro/microvm.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -18,6 +22,7 @@
       self,
       nixpkgs,
       treefmt-nix,
+      microvm,
       ...
     }@inputs:
     let
@@ -45,6 +50,7 @@
     {
       nixosModules.default = import ./modules;
       nixosModules.nixflix = import ./modules;
+      nixosModules.microvm = import ./modules/microvm { inherit microvm; };
 
       packages = perSystem (
         {
@@ -91,6 +97,7 @@
           tests = import ./tests {
             inherit system pkgs lib;
             nixosModules = self.nixosModules.default;
+            microvmModules = self.nixosModules.microvm;
           };
         in
         {

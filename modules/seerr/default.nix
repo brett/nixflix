@@ -36,7 +36,9 @@ in
       in
       [
         {
-          assertion = cfg.jellyfin.adminUsername != null && cfg.jellyfin.adminPassword != null;
+          # In microVM mode jellyfin runs in its own VM — suppress the assertion
+          # for guests where nixflix.isGuest = true (set by common-guest.nix).
+          assertion = (cfg.jellyfin.adminUsername != null && cfg.jellyfin.adminPassword != null) || config.nixflix.isGuest;
           message = "Seerr requires Jellyfin admin credentials. Either enable nixflix.jellyfin with an admin user, or set nixflix.seerr.jellyfin.adminUsername and nixflix.seerr.jellyfin.adminPassword.";
         }
         {

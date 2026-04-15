@@ -7,6 +7,7 @@
 with lib;
 let
   mkSecureCurl = import ../../lib/mk-secure-curl.nix { inherit lib pkgs; };
+  mkWaitForApiScript = import ./mkWaitForApiScript.nix { inherit lib pkgs; };
   capitalizedName =
     lib.toUpper (builtins.substring 0 1 serviceName) + builtins.substring 1 (-1) serviceName;
 in
@@ -25,15 +26,19 @@ in
     '';
   };
 
-  mkService = serviceConfig: {
+  mkService = serviceConfig:
+  let
+    hasConfigService = serviceConfig.apiKey != null && serviceConfig.hostConfig.password != null;
+  in {
     description = "Configure ${serviceName} root folders via API";
-    after = [ "${serviceName}-config.service" ] ++ config.nixflix.serviceDependencies;
-    requires = [ "${serviceName}-config.service" ] ++ config.nixflix.serviceDependencies;
+    after = [ "${serviceName}.service" ] ++ optionals hasConfigService [ "${serviceName}-config.service" ] ++ config.nixflix.serviceDependencies;
+    requires = optionals hasConfigService [ "${serviceName}-config.service" ] ++ config.nixflix.serviceDependencies;
     wantedBy = [ "multi-user.target" ];
 
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
+      ExecStartPre = mkWaitForApiScript serviceName serviceConfig;
     };
 
     script = ''

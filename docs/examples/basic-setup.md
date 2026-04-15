@@ -290,3 +290,4 @@ Replace these with your own values:
 - Add content through Sonarr/Radarr/Lidarr
 - Access Jellyfin - libraries are already configured!
 - Verify VPN: `mullvad status` should show "Connected"
+- Want process isolation? See the [MicroVM Setup Example](microvm-setup.md)

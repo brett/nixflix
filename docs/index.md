@@ -41,4 +41,5 @@ title: Getting Started
 
 - [Installation](getting-started/index.md) - Add Nixflix to your NixOS configuration
 - [Examples](examples/basic-setup.md) - Copy-paste ready configurations
+- [MicroVM Isolation](examples/microvm-setup.md) - Run services in isolated VMs
 - [Reference](reference/index.md) - Complete documentation of all options

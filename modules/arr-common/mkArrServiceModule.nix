@@ -388,18 +388,14 @@ in
           "nixflix-setup-dirs.service"
         ]
         ++ config.nixflix.serviceDependencies
-        ++ (optional (
-          cfg.config.apiKey != null && cfg.config.hostConfig.password != null
-        ) "${serviceName}-env.service")
+        ++ (optional (cfg.config.apiKey != null) "${serviceName}-env.service")
         ++ (optional config.nixflix.postgres.enable "postgresql-ready.target")
         ++ (optional config.nixflix.mullvad.enable "mullvad-config.service");
         requires = [
           "nixflix-setup-dirs.service"
         ]
         ++ config.nixflix.serviceDependencies
-        ++ (optional (
-          cfg.config.apiKey != null && cfg.config.hostConfig.password != null
-        ) "${serviceName}-env.service")
+        ++ (optional (cfg.config.apiKey != null) "${serviceName}-env.service")
         ++ (optional config.nixflix.postgres.enable "postgresql-ready.target");
         wants = optional config.nixflix.mullvad.enable "mullvad-config.service";
         wantedBy = [ "multi-user.target" ];
@@ -412,7 +408,7 @@ in
           ExecStartPost = "+" + (mkWaitForApiScript serviceName cfg.config);
           Restart = "on-failure";
         }
-        // optionalAttrs (cfg.config.apiKey != null && cfg.config.hostConfig.password != null) {
+        // optionalAttrs (cfg.config.apiKey != null) {
           EnvironmentFile = "/run/${serviceName}/env";
         }
         // optionalAttrs (config.nixflix.mullvad.enable && !cfg.vpn.enable) {
@@ -427,7 +423,7 @@ in
         };
       };
     }
-    // optionalAttrs (cfg.config.apiKey != null && cfg.config.hostConfig.password != null) {
+    // optionalAttrs (cfg.config.apiKey != null) {
       "${serviceName}-env" = {
         description = "Setup ${capitalizedName} environment file";
         wantedBy = [ "${serviceName}.service" ];
@@ -447,7 +443,8 @@ in
           chmod 0400 /run/${serviceName}/env
         '';
       };
-
+    }
+    // optionalAttrs (cfg.config.apiKey != null && cfg.config.hostConfig.password != null) {
       "${serviceName}-config" = hostConfig.mkService cfg.config;
     }
     // optionalAttrs (usesMediaDirs && cfg.config.apiKey != null && cfg.config.rootFolders != [ ]) {

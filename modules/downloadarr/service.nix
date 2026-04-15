@@ -62,19 +62,21 @@ let
         toUpper (builtins.substring 0 1 serviceName) + builtins.substring 1 (-1) serviceName;
 
       clients = map (transformClient serviceName) allClients;
+      serviceAddress = config.nixflix.globals.serviceAddresses.${serviceName} or "127.0.0.1";
+      hasConfigService = serviceConfig.apiKey != null && serviceConfig.hostConfig.password != null;
     in
     {
       "${serviceName}-downloadclients" = {
         description = "Configure ${serviceName} download clients via API";
         after = [
           "${serviceName}.service"
-          "${serviceName}-config.service"
         ]
+        ++ lib.optionals hasConfigService [ "${serviceName}-config.service" ]
         ++ clientDependencies;
         requires = [
           "${serviceName}.service"
-          "${serviceName}-config.service"
         ]
+        ++ lib.optionals hasConfigService [ "${serviceName}-config.service" ]
         ++ clientDependencies;
         wantedBy = [ "multi-user.target" ];
 
@@ -83,20 +85,21 @@ let
           RemainAfterExit = true;
           ExecStartPre =
             "${pkgs.curl}/bin/curl --retry 30 --retry-delay 2 --retry-connrefused -so /dev/null"
-            + " http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}/system/status";
+            + " http://${serviceAddress}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}/system/status";
         };
 
         script = ''
           set -eu
 
-          BASE_URL="http://127.0.0.1:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
+          BASE_URL="http://${serviceAddress}:${builtins.toString serviceConfig.hostConfig.port}${serviceConfig.hostConfig.urlBase}/api/${serviceConfig.apiVersion}"
 
           # Fetch all download client schemas
+          # --retry: arr services may restart briefly after initial config; retry handles that window
           echo "Fetching download client schemas..."
           SCHEMAS=$(${
             mkSecureCurl serviceConfig.apiKey {
               url = "$BASE_URL/downloadclient/schema";
-              extraArgs = "-S";
+              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-all-errors --retry-max-time 120";
             }
           })
 
@@ -105,7 +108,7 @@ let
           DOWNLOAD_CLIENTS=$(${
             mkSecureCurl serviceConfig.apiKey {
               url = "$BASE_URL/downloadclient";
-              extraArgs = "-S";
+              extraArgs = "-S --retry 5 --retry-delay 10 --retry-connrefused --retry-all-errors --retry-max-time 120";
             }
           })
 
@@ -147,7 +150,9 @@ let
                 "username"
                 "password"
               ];
-              fieldOverrides = filterAttrs (name: value: value != null && !hasPrefix "_" name) allOverrides;
+              fieldOverrides = filterAttrs (
+                name: value: value != null && value != "" && !hasPrefix "_" name
+              ) allOverrides;
               fieldOverridesJson = builtins.toJSON fieldOverrides;
 
               jqSecrets = secrets.mkJqSecretArgs {
@@ -204,7 +209,8 @@ let
                         "Content-Type" = "application/json";
                       };
                       data = "$UPDATED_CLIENT";
-                      extraArgs = "-Sf";
+                      # shell loop handles retries; timeouts bound each attempt
+                      extraArgs = "-Sf --connect-timeout 5 --max-time 30";
                     }
                   } >/dev/null; then
                     break
@@ -239,7 +245,8 @@ let
                         "Content-Type" = "application/json";
                       };
                       data = "$NEW_CLIENT";
-                      extraArgs = "-Sf";
+                      # shell loop handles retries; timeouts bound each attempt
+                      extraArgs = "-Sf --connect-timeout 5 --max-time 30";
                     }
                   } >/dev/null; then
                     break

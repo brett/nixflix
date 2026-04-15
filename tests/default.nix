@@ -3,6 +3,7 @@
   nixosModules,
   pkgs ? import <nixpkgs> { inherit system; },
   system ? builtins.currentSystem,
+  microvmModules ? null,
 }:
 {
   # Import all test modules
@@ -12,7 +13,15 @@
       pkgs
       nixosModules
       lib
+      microvmModules
       ;
   };
-  unit-tests = import ./unit-tests { inherit system pkgs nixosModules; };
+  unit-tests = import ./unit-tests {
+    inherit
+      system
+      pkgs
+      nixosModules
+      microvmModules
+      ;
+  };
 }

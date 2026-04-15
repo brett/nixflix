@@ -223,7 +223,12 @@ in
         ++ optionals config.nixflix.sonarr-anime.enable [
           "sonarr-anime.service"
           "sonarr-anime-config.service"
-        ];
+        ]
+        # after (not requires) downloadclients: wait for arr stability after API
+        # config, but don't fail if the services don't exist (no clients configured).
+        ++ optional config.nixflix.radarr.enable "radarr-downloadclients.service"
+        ++ optional config.nixflix.sonarr.enable "sonarr-downloadclients.service"
+        ++ optional (config.nixflix.sonarr-anime.enable or false) "sonarr-anime-downloadclients.service";
         requires =
           optionals config.nixflix.radarr.enable [
             "radarr.service"
@@ -239,6 +244,16 @@ in
           ];
         wants = [ "network-online.target" ];
         wantedBy = mkForce [ "multi-user.target" ];
+        serviceConfig = {
+          # Retry on transient failure (arr service mid-restart) so a single
+          # timing race does not permanently leave recyclarr failed.
+          Restart = mkDefault "on-failure";
+          RestartSec = mkDefault 30;
+          # Allow up to 10 retries in 10 min: DNS in sandbox environments can
+          # take several minutes to stabilise before git can reach github.com.
+          StartLimitBurst = mkDefault 10;
+          StartLimitIntervalSec = mkDefault 600;
+        };
       };
     };
   };

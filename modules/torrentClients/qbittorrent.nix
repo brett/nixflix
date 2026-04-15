@@ -129,6 +129,12 @@ in
             default = "127.0.0.1";
             description = "Bind address for the WebUI";
           };
+
+          Preferences.WebUI.Username = mkOption {
+            type = types.str;
+            default = "admin";
+            description = "WebUI login username. Used by the microVM readiness check and download client integration.";
+          };
         };
       };
     };
@@ -141,6 +147,7 @@ in
       "subdomain"
       "downloadsDir"
       "categories"
+      "microvm"
     ];
 
     users = {
@@ -204,6 +211,7 @@ in
     services.nginx.virtualHosts."${hostname}" = mkIf config.nixflix.nginx.enable {
       inherit (config.nixflix.nginx) forceSSL;
       useACMEHost = if config.nixflix.nginx.enableACME then config.nixflix.nginx.domain else null;
+
 
       locations."/" = {
         proxyPass = "http://127.0.0.1:${toString service.webuiPort}";
